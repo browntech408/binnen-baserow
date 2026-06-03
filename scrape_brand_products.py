@@ -1,11 +1,10 @@
 """
-Scrape products from ONE brand website and save a text report (no Baserow write).
-
-Default brand: Spectrum Design (matches productsDetails CSV examples).
+Scrape products from ONE brand website; optional save to Baserow productsDetails.
 
 Usage:
   python scrape_brand_products.py
-  python scrape_brand_products.py --brand "Baenks" --url https://www.baenks.nl --max 3
+  python scrape_brand_products.py --max 4 --save
+  python scrape_brand_products.py --brand "Baenks" --url https://www.baenks.nl --max 3 --save
 """
 from __future__ import annotations
 
@@ -19,6 +18,7 @@ from baserow_client import BaserowClient
 from brand_scraper import extract_brand_name, extract_domain, normalize_url, row_field
 from config import load_settings
 from product_schema import GENERATED_LATER, SCRAPE_FIELDS
+from product_baserow import save_products
 from product_scraper import scrape_brand_products
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
@@ -41,6 +41,11 @@ def parse_args() -> argparse.Namespace:
         "--from-baserow",
         action="store_true",
         help="Pick first brand with URL from Baserow brands table instead of --url",
+    )
+    p.add_argument(
+        "--save",
+        action="store_true",
+        help="Create or update rows in Baserow productsDetails table (by product_url)",
     )
     return p.parse_args()
 
@@ -80,7 +85,7 @@ def build_report(
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     header = [
         "=" * 70,
-        "BRAND PRODUCT SCRAPE — TEST REPORT (not saved to Baserow)",
+        "BRAND PRODUCT SCRAPE — REPORT",
         "=" * 70,
         f"Scraped at: {now}",
         f"Brand_table: {brand}",
@@ -176,6 +181,30 @@ def main() -> int:
     if len(report) > 2500:
         print(f"\n... ({len(report)} chars total, see file)")
     print(f"\nSaved:\n  {txt_path}\n  {json_path}")
+
+    if args.save:
+        client = BaserowClient(settings)
+        print(f"\nSaving to Baserow productsDetails (table {settings.products_table_id})...")
+        try:
+            db_results = save_products(client, settings, products, brand)
+        except ValueError as exc:
+            print(f"Baserow save failed: {exc}", file=sys.stderr)
+            return 1
+
+        created = sum(1 for r in db_results if r.get("action") == "created")
+        updated = sum(1 for r in db_results if r.get("action") == "updated")
+        failed = sum(1 for r in db_results if not r.get("ok"))
+        print(f"Baserow: {created} created, {updated} updated, {failed} failed")
+        for r in db_results:
+            if r.get("ok"):
+                imgs = r.get("images_uploaded", 0)
+                extra = f" ({imgs} images)" if imgs else ""
+                print(f"  [{r['action']}] row {r['row_id']}: {r['product_name']}{extra}")
+            else:
+                print(f"  [error] {r.get('product_name')}: {r.get('error')}", file=sys.stderr)
+        if failed:
+            return 1
+
     return 0
 
 
