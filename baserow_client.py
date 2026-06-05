@@ -113,3 +113,21 @@ class BaserowClient:
         )
         response.raise_for_status()
         return response.json()
+
+    def delete_row(self, table_id: int, row_id: int) -> None:
+        response = self.session.delete(
+            self._url(f"/database/rows/table/{table_id}/{row_id}/"),
+            timeout=60,
+        )
+        response.raise_for_status()
+
+    def batch_delete_rows(self, table_id: int, row_ids: list[int]) -> None:
+        """Delete multiple rows. Requires Delete permission on the table."""
+        if not row_ids:
+            return
+        response = self.session.post(
+            self._url(f"/database/rows/table/{table_id}/batch-delete/"),
+            json={"items": row_ids},
+            timeout=120,
+        )
+        response.raise_for_status()
