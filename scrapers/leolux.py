@@ -10,7 +10,9 @@ from bs4 import BeautifulSoup
 
 from brand_scraper import DEFAULT_HEADERS, normalize_url
 from product_schema import ScrapedProduct
+from product_scraper import _slug_to_title
 from scrapers.extract_common import scrape_product_page_common
+from scrapers.taxonomy import capture_source_categories, normalize_product_categories
 
 COLLECTIE = "/collectie"
 
@@ -35,6 +37,8 @@ def _classify(url: str) -> str | None:
     after = parts[idx + 1 :]
     if not after:
         return None
+    if after[0].lower() in ("categorie", "category"):
+        return "category"
     if len(after) >= 2:
         return "product"
     return "category"
@@ -66,7 +70,7 @@ def discover_product_urls(site_url: str, timeout: float) -> list[str]:
             elif kind == "product":
                 found.add(href.rstrip("/"))
 
-        for cat in sorted(category_pages)[:30]:
+        for cat in sorted(category_pages)[:50]:
             try:
                 cat_resp = requests.get(
                     cat, headers=DEFAULT_HEADERS, timeout=timeout, allow_redirects=True
@@ -88,8 +92,38 @@ def discover_product_urls(site_url: str, timeout: float) -> list[str]:
     return sorted(found, key=lambda u: (-depth(u), u))
 
 
+def _path_meta(url: str) -> tuple[str, str, str]:
+    """Return (category_slug, product_slug, title) from /collectie/{cat}/{product}."""
+    parts = [p for p in urlparse(url).path.split("/") if p]
+    low = [p.lower() for p in parts]
+    if "collectie" not in low:
+        return "", "", ""
+    idx = low.index("collectie")
+    after = parts[idx + 1 :]
+    if len(after) < 2 or after[0].lower() in ("categorie", "category"):
+        return "", "", ""
+    slug = after[-1]
+    return after[0], slug, _slug_to_title(slug)
+
+
 def scrape_product_page(product_url: str, brand_name: str, timeout: float) -> ScrapedProduct:
-    return scrape_product_page_common(product_url, brand_name, timeout)
+    product = scrape_product_page_common(product_url, brand_name, timeout)
+    if not product.scrape_ok:
+        return product
+    category, _slug, title = _path_meta(product.product_url or product_url)
+    if category:
+        product.source_product_category = category.replace("-", " ")
+        product.source_product_subcategory = ""
+        product.product_category = product.source_product_category
+        product.sub_category = ""
+    if title and (
+        not product.product_name
+        or product.product_name.lower() == category.lower()
+    ):
+        product.product_name = title
+    capture_source_categories(product)
+    normalize_product_categories(product)
+    return product
 
 
 def scrape_brand_products(

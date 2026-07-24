@@ -89,17 +89,29 @@ python preview_brands.py
 
 Shows which brands would be scraped without calling websites.
 
-### 7. Test: scrape products from ONE brand (text + JSON, no DB)
+### 7. Scrape products (domain-specific scraper, same JSON output)
 
-Matches **productsDetails** columns from website. Default: Spectrum Design, 5 products.
+**Default** — first **8 brands** from Baserow (Spectrum Design, Design On Stock, Sleep World, Artifort, Baenks, BEEK, Bert Plantagie, Castelijn), **all products** each (create or update by `product_url`), **save to DB**:
 
 ```powershell
 python scrape_brand_products.py
-python scrape_brand_products.py --max 4
-python scrape_brand_products.py --from-baserow --max 3
+python scrape_brand_products.py --save
 ```
 
+Other examples:
+
+```powershell
+python scrape_brand_products.py --limit-brands 5
+python scrape_brand_products.py --max 5
+python scrape_brand_products.py --no-save
+python scrape_brand_products.py --brand "Leolux" --url https://www.leolux.nl
+```
+
+Site-specific scrapers live in `scrapers/` (see `scrapers/router.py`). **Spectrum Design** still uses `product_scraper.py` unchanged.
+
 Output: `output/products_Spectrum_Design.txt` and `.json`
+
+With `--save`: creates or updates rows in **productsDetails** (table **802**) matched by `product_url`, links brand (table **805**), maps categories via tables **806** / **807**, and uploads images into file fields (`product_images`, `hero_images`, `lifestyle_images`, `detail_image`) via Baserow `upload-via-url`.
 
 ### 8. Test: scrape FIRST brand homepage only (text + PDF report)
 
@@ -140,8 +152,29 @@ It will:
 ## Current scope
 
 - **`main.py`** — homepage only (title + meta description).
-- **`scrape_brand_products.py`** — product pages from one brand; writes text/JSON under `output/` (no Baserow write yet).
-- **Future work** — dedicated modules for product pages at scale, **XML feeds** (Pronto, Baenks, …), and **Sleepworld** scraping.
+- **`scrape_brand_products.py`** — product pages from one brand; text/JSON under `output/`; `--save` writes to Baserow.
+- **`product_baserow.py`** — create/update product rows, categories, and image upload.
+- **Future work** — per-brand scraper adapters where HTML differs; **XML feeds** (Pronto, Baenks, …); **Sleepworld**.
+
+### Baserow relations (database 181)
+
+How products link to brands, categories, and subcategories:
+
+```powershell
+python discover_baserow_relations.py
+```
+
+Full guide: **[docs/BASEROW_RELATIONS.md](docs/BASEROW_RELATIONS.md)**
+
+### Scraping many brands (different HTML per site)
+
+Each brand website uses different HTML. **Do not copy one scraper 21 times.**  
+Read **[docs/SCRAPING.md](docs/SCRAPING.md)** for the recommended approach:
+
+1. Shared output model (`ScrapedProduct`)
+2. Generic discovery + extraction first
+3. Brand-specific adapter only when generic fails
+4. XML feeds via a separate importer (not HTML scrape)
 
 ## Next steps (per client handover)
 
@@ -155,7 +188,9 @@ The handover PDF includes **XML feed URLs** for retailers. Those feeds are separ
 |------|------|
 | `main.py` | Entry point — loop brands, scrape, update Baserow |
 | `scrape_first_brand.py` | Scrape first brand homepage → text + PDF report |
-| `scrape_brand_products.py` | Scrape products from one brand → text + JSON report |
+| `scrape_brand_products.py` | Scrape products; `--save` → Baserow create/update |
+| `product_baserow.py` | Map scraped data → Baserow API fields |
+| `clear_products_table.py` | Delete all rows in productsDetails (`--confirm`) |
 | `preview_brands.py` | Dry-run: which brands would be scraped |
 | `discover_baserow.py` | Prints field IDs for your table |
 | `trim_table_rows.py` | Keep first N rows in a table; delete the rest (`--confirm`) |

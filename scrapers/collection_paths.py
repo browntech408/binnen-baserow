@@ -1,6 +1,6 @@
 """
 Sites with /Collection/{category}/{product} paths.
-Example: artifort.com
+Examples: artifort.com, pode.eu
 """
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from brand_scraper import DEFAULT_HEADERS, normalize_url
 from product_schema import ScrapedProduct
 from product_scraper import _slug_to_title
 from scrapers.extract_common import scrape_product_page_common
+from scrapers.taxonomy import normalize_product_categories
 
 COLLECTION_MARKERS = ("/collection/", "/collectie/")
 
@@ -142,15 +143,16 @@ def scrape_product_page(product_url: str, brand_name: str, timeout: float) -> Sc
         return product
     category, _slug, title = _path_meta(product.product_url or product_url)
     if category:
-        product.product_category = category
         product.source_product_category = category
-        product.sub_category = ""
         product.source_product_subcategory = ""
+        product.product_category = category
+        product.sub_category = ""
     if title and (
         not product.product_name
         or product.product_name.lower() == category.lower()
     ):
         product.product_name = title
+    normalize_product_categories(product)
     return product
 
 

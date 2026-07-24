@@ -1,6 +1,8 @@
 """
-Spectrum Design — frozen path: uses product_scraper.py unchanged.
-Do not modify product_scraper.py behaviour for this domain.
+Spectrum Design (spectrumdesign.nl) — dedicated scraper.
+
+Implementation lives in product_scraper.py (frozen /collectie/ behaviour).
+Edit product_scraper.py for Spectrum-specific HTML changes.
 """
 from __future__ import annotations
 

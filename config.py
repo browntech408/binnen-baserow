@@ -38,6 +38,7 @@ class Settings:
     field_product_status: str
     field_designer: str
     field_designer_description: str
+    field_designer_image: str
     field_source_category: str
     field_source_subcategory: str
     field_price: str
@@ -65,6 +66,17 @@ class Settings:
     skip_if_has_products: bool
     scrape_delay_seconds: float
     http_timeout: float
+    openrouter_api_key: str
+    openrouter_model: str
+    ai_product_descriptions: bool
+    field_ai_description_nl: str
+    field_accordion_product_description: str
+    shopify_metafield_namespace: str
+    shopify_metafield_category: str
+    shopify_metafield_sub_category: str
+    shopify_metafield_lifestyle_images: str
+    shopify_metafield_designer: str
+    shopify_metafield_designer_image: str
 
     @property
     def api_base(self) -> str:
@@ -114,6 +126,9 @@ def load_settings() -> Settings:
         field_designer_description=os.getenv(
             "FIELD_DESIGNER_DESCRIPTION", "field_8234"
         ).strip(),
+        field_designer_image=os.getenv(
+            "FIELD_DESIGNER_IMAGE", "field_8232"
+        ).strip(),
         field_source_category=os.getenv(
             "FIELD_SOURCE_CATEGORY", "field_8245"
         ).strip(),
@@ -133,8 +148,8 @@ def load_settings() -> Settings:
         ).strip(),
         field_detail_image=os.getenv("FIELD_DETAIL_IMAGE", "field_8237").strip(),
         upload_product_images=_env_bool("UPLOAD_PRODUCT_IMAGES", True),
-        max_product_images_upload=int(os.getenv("MAX_PRODUCT_IMAGES_UPLOAD", "8")),
-        max_lifestyle_images_upload=int(os.getenv("MAX_LIFESTYLE_IMAGES_UPLOAD", "3")),
+        max_product_images_upload=int(os.getenv("MAX_PRODUCT_IMAGES_UPLOAD", "0")),
+        max_lifestyle_images_upload=int(os.getenv("MAX_LIFESTYLE_IMAGES_UPLOAD", "0")),
         field_category_name=os.getenv("FIELD_CATEGORY_NAME", "field_8329").strip(),
         field_subcategory_name=os.getenv(
             "FIELD_SUBCATEGORY_NAME", "field_8333"
@@ -157,4 +172,33 @@ def load_settings() -> Settings:
         skip_if_has_products=_env_bool("SKIP_IF_HAS_PRODUCTS", False),
         scrape_delay_seconds=float(os.getenv("SCRAPE_DELAY_SECONDS", "2")),
         http_timeout=float(os.getenv("HTTP_TIMEOUT", "30")),
+        openrouter_api_key=os.getenv("OPENROUTER_API_KEY", "").strip().strip('"'),
+        openrouter_model=os.getenv(
+            "OPENROUTER_MODEL", "openai/gpt-4o-mini"
+        ).strip(),
+        ai_product_descriptions=_env_bool("AI_PRODUCT_DESCRIPTIONS", False),
+        field_ai_description_nl=os.getenv(
+            "FIELD_AI_DESCRIPTION_NL", "field_8239"
+        ).strip(),
+        field_accordion_product_description=os.getenv(
+            "FIELD_ACCORDION_PRODUCT_DESCRIPTION", "field_8287"
+        ).strip(),
+        shopify_metafield_namespace=os.getenv(
+            "SHOPIFY_METAFIELD_NAMESPACE", "custom"
+        ).strip(),
+        shopify_metafield_category=os.getenv(
+            "SHOPIFY_METAFIELD_CATEGORY", "product_category"
+        ).strip(),
+        shopify_metafield_sub_category=os.getenv(
+            "SHOPIFY_METAFIELD_SUB_CATEGORY", "sub_category"
+        ).strip(),
+        shopify_metafield_lifestyle_images=os.getenv(
+            "SHOPIFY_METAFIELD_LIFESTYLE_IMAGES", "lifestyle_images"
+        ).strip(),
+        shopify_metafield_designer=os.getenv(
+            "SHOPIFY_METAFIELD_DESIGNER", "designer"
+        ).strip(),
+        shopify_metafield_designer_image=os.getenv(
+            "SHOPIFY_METAFIELD_DESIGNER_IMAGE", "designer_image"
+        ).strip(),
     )

@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 from brand_scraper import DEFAULT_HEADERS, normalize_url
 from product_schema import ScrapedProduct
 from scrapers.extract_common import scrape_product_page_common
+from scrapers.taxonomy import normalize_product_categories
 
 # First path segment = category listing; product = slug or .html (Magento)
 LISTING_SEGMENTS = frozenset(
@@ -167,6 +168,7 @@ def scrape_product_page(product_url: str, brand_name: str, timeout: float) -> Sc
     ):
         product.product_category = from_path
         product.source_product_category = from_path
+    normalize_product_categories(product)
     return product
 
 

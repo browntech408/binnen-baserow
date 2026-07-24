@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 
 from brand_scraper import DEFAULT_HEADERS, normalize_url
 from product_schema import ScrapedProduct
+from scrapers.text_clean import is_junk_paragraph
 
 COLLECTIE_PATH = "/collectie/"
 UPLOADS_PATH = "/wp-content/uploads/"
@@ -107,8 +108,10 @@ def scrape_product_page(
     product.designer, product.designerDescription = _parse_designer(soup)
     product.price = _find_price(soup)
     product.product_category, product.sub_category = _parse_categories(soup, h1, final_url)
-    product.source_product_category = product.product_category
-    product.source_product_subcategory = product.sub_category
+    from scrapers.taxonomy import capture_source_categories, normalize_product_categories
+
+    capture_source_categories(product)
+    normalize_product_categories(product)
 
     images = _collect_product_images(soup, h1, final_url)
     product.product_images = images
@@ -152,6 +155,8 @@ def _main_paragraphs(soup: BeautifulSoup, h1: BeautifulSoup | None) -> str:
         text = el.get_text(" ", strip=True)
         if len(text) < 60:
             continue
+        if is_junk_paragraph(text):
+            break
         if "»" in text and "collectie" in text.lower():
             continue
         if text not in chunks:
@@ -173,9 +178,11 @@ def _fallback_description(soup: BeautifulSoup) -> str:
     chunks = []
     for p in main.find_all("p"):
         text = p.get_text(" ", strip=True)
-        if len(text) > 60 and "»" not in text:
+        if len(text) > 60 and "»" not in text and not is_junk_paragraph(text):
             chunks.append(text)
-    return "\n\n".join(chunks[:6])
+        if len(chunks) >= 6:
+            break
+    return "\n\n".join(chunks)
 
 
 def _parse_designer(soup: BeautifulSoup) -> tuple[str, str]:
@@ -305,7 +312,7 @@ def _is_product_image_url(url: str) -> bool:
 
 
 def _collect_product_images(
-    soup: BeautifulSoup, h1: BeautifulSoup | None, page_url: str, *, max_images: int = 12
+    soup: BeautifulSoup, h1: BeautifulSoup | None, page_url: str, *, max_images: int = 0
 ) -> list[str]:
     """Images from the product section only (excludes related products / footer)."""
     seen: set[str] = set()
@@ -362,11 +369,11 @@ def _collect_product_images(
                 score = 0
             else:
                 score = 1
-            if score or len(ordered) < max_images:
+            if score or max_images <= 0 or len(ordered) < max_images:
                 seen.add(url)
                 ordered.append(url)
 
-    return ordered[:max_images]
+    return ordered if max_images <= 0 else ordered[:max_images]
 
 
 def scrape_brand_products(

@@ -80,6 +80,22 @@ class BaserowClient:
         response.raise_for_status()
         return response.json()
 
+    def upload_file(self, path: str, *, timeout: float = 120) -> str:
+        """Upload a local file into Baserow user storage."""
+        with open(path, "rb") as handle:
+            response = requests.post(
+                self._url("/user-files/upload-file/"),
+                files={"file": handle},
+                headers={"Authorization": f"Token {self.settings.baserow_token}"},
+                timeout=timeout,
+            )
+        response.raise_for_status()
+        payload = response.json()
+        name = payload.get("name")
+        if not name:
+            raise ValueError(f"Upload response missing name: {payload}")
+        return str(name)
+
     def upload_file_via_url(self, file_url: str, *, timeout: float = 120) -> str:
         """
         Upload a remote file into Baserow user storage.

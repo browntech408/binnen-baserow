@@ -6,29 +6,61 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from urllib.parse import urlparse
+
 from baserow_client import BaserowClient
 from baserow_images import BaserowImageUploader, build_image_fields
 from brand_scraper import extract_brand_name, row_field
 from config import Settings
+from description_ai import apply_ai_descriptions_if_enabled
 from product_schema import ScrapedProduct
-
-# Website breadcrumb labels → Baserow subcategory names (table 807)
-SUB_CATEGORY_ALIASES: dict[str, str] = {
-    "accessories": "Woonaccessoires",
-    "accessoires": "Woonaccessoires",
-    "accessory": "Woonaccessoires",
-}
-
-# Top-level breadcrumb segment — not a Baserow category row
-IGNORE_CATEGORY_NAMES = frozenset({"collectie", "collection", "catalogus", "catalog"})
+from scrapers.taxonomy import (
+    ALLOW_AUTO_CREATE_SUB,
+    CATEGORY_ALIASES,
+    IGNORE_TOP,
+    SUB_ALIASES,
+    capture_source_categories,
+    normalize_product_categories,
+)
 
 
 def _norm_url(url: str) -> str:
-    return (url or "").strip().rstrip("/")
+    """Canonical product URL for dedup (no query/fragment, lowercase path)."""
+    u = (url or "").strip()
+    if not u:
+        return ""
+    p = urlparse(u)
+    host = p.netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    path = p.path.rstrip("/").lower()
+    if not host:
+        return path
+    return f"{p.scheme}://{host}{path}"
 
 
 def _norm_name(name: str) -> str:
     return re.sub(r"\s+", " ", (name or "").strip().lower())
+
+
+def _auto_create_subcategories(product: ScrapedProduct) -> bool:
+    """Brand breadcrumb taxonomy — create missing rows in 807 when saving."""
+    host = urlparse(product.product_url or "").netloc.lower().replace("www.", "")
+    return host in {"tonone.com", "gealux.nl", "label.nl", "carpetrebel.com"}
+
+
+def _map_category_name(name: str) -> str:
+    key = _norm_name(name)
+    if not key or key in IGNORE_TOP:
+        return ""
+    return CATEGORY_ALIASES.get(key, (name or "").strip())
+
+
+def _map_sub_name(name: str) -> str:
+    key = _norm_name(name)
+    if not key:
+        return ""
+    return SUB_ALIASES.get(key, (name or "").strip())
 
 
 class CategoryLookup:
@@ -63,29 +95,117 @@ class CategoryLookup:
 
         self._loaded = True
 
-    def resolve(self, category: str, sub_category: str) -> tuple[list[int], list[int]]:
+    def ensure_category(self, name: str, *, preserve_label: bool = False) -> int:
         self._load()
+        if preserve_label:
+            display = (name or "").strip() or "Overig"
+        else:
+            display = _map_category_name(name) or (name or "").strip() or "Overig"
+        key = _norm_name(display)
+        if key in self._categories:
+            cat_id = self._categories[key]
+            if preserve_label and display:
+                self._client.update_row(
+                    self._settings.category_table_id,
+                    cat_id,
+                    {self._settings.field_category_name: display},
+                )
+            return cat_id
+
+        row = self._client.create_row(
+            self._settings.category_table_id,
+            {self._settings.field_category_name: display},
+        )
+        cat_id = row["id"]
+        self._categories[key] = cat_id
+        return cat_id
+
+    def ensure_subcategory(
+        self,
+        name: str,
+        parent_cat_id: int | None,
+        *,
+        allow_create: bool = False,
+        preserve_label: bool = False,
+    ) -> int | None:
+        self._load()
+        if preserve_label:
+            display = (name or "").strip()
+        else:
+            display = _map_sub_name(name) or (name or "").strip()
+        if not display:
+            return None
+        key = _norm_name(display)
+        if key in self._subcategories:
+            return self._subcategories[key]
+        if not allow_create and key not in ALLOW_AUTO_CREATE_SUB:
+            return None
+
+        fields: dict[str, Any] = {self._settings.field_subcategory_name: display}
+        if parent_cat_id:
+            fields[self._settings.field_subcategory_parent] = [parent_cat_id]
+
+        row = self._client.create_row(self._settings.subcategory_table_id, fields)
+        sub_id = row["id"]
+        self._subcategories[key] = sub_id
+        if parent_cat_id:
+            self._sub_parents[sub_id] = parent_cat_id
+        return sub_id
+
+    def resolve(
+        self,
+        category: str,
+        sub_category: str,
+        *,
+        create: bool = True,
+        auto_create_sub: bool = False,
+    ) -> tuple[list[int], list[int]]:
+        """Resolve names to row IDs; optionally create missing rows in 806/807."""
+        self._load()
+        preserve = auto_create_sub
+        if preserve:
+            cat_name = (category or "").strip()
+            sub_name = (sub_category or "").strip()
+        else:
+            cat_name = _map_category_name(category)
+            sub_name = _map_sub_name(sub_category)
+
         cat_ids: list[int] = []
         sub_ids: list[int] = []
 
-        sub_key = SUB_CATEGORY_ALIASES.get(
-            _norm_name(sub_category), _norm_name(sub_category)
-        )
-        if sub_key and sub_key in self._subcategories:
-            sub_id = self._subcategories[sub_key]
-            sub_ids = [sub_id]
-            parent = self._sub_parents.get(sub_id)
-            if parent:
-                cat_ids = [parent]
+        if sub_name:
+            sub_key = _norm_name(sub_name)
+            if sub_key in self._subcategories:
+                sub_ids = [self._subcategories[sub_key]]
+                parent = self._sub_parents.get(sub_ids[0])
+                if parent:
+                    cat_ids = [parent]
+            elif create:
+                parent_id = self.ensure_category(
+                    cat_name or "Products",
+                    preserve_label=preserve,
+                )
+                sub_id = self.ensure_subcategory(
+                    sub_name,
+                    parent_id,
+                    allow_create=auto_create_sub,
+                    preserve_label=preserve,
+                )
+                if sub_id:
+                    sub_ids = [sub_id]
+                    cat_ids = [parent_id]
+                elif cat_name:
+                    cat_ids = [self.ensure_category(cat_name)]
 
-        if not cat_ids:
-            for candidate in (sub_category, category):
-                key = _norm_name(candidate)
-                if not key or key in IGNORE_CATEGORY_NAMES:
-                    continue
-                if key in self._categories:
-                    cat_ids = [self._categories[key]]
-                    break
+        if not cat_ids and cat_name:
+            if create:
+                cat_ids = [
+                    self.ensure_category(cat_name, preserve_label=preserve)
+                ]
+            else:
+                cat_key = _norm_name(cat_name)
+                if cat_key in self._categories:
+                    cat_ids = [self._categories[cat_key]]
 
         return cat_ids, sub_ids
 
@@ -140,24 +260,41 @@ def scraped_product_to_fields(
 
     set_field("field_product_name", product.product_name)
     set_field("field_product_description", product.product_description)
+    set_field("field_ai_description_nl", product.ai_description_translated_NL)
     set_field("field_product_url", _norm_url(product.product_url))
     set_field("field_product_status", product.Status)
     set_field("field_designer", product.designer)
     set_field("field_designer_description", product.designerDescription)
-    set_field("field_source_category", product.source_product_category)
-    set_field("field_source_subcategory", product.source_product_subcategory)
+    if image_uploader and s.field_designer_image:
+        designer_local = getattr(product, "local_designer_image_file", "") or ""
+        designer_url = getattr(product, "designerImage", "") or ""
+        uploaded_designer: list[dict[str, str]] = []
+        if designer_local:
+            name = image_uploader.upload_local(designer_local)
+            if name:
+                uploaded_designer = [{"name": name}]
+        elif designer_url:
+            uploaded_designer = image_uploader.upload_many([designer_url])
+        if uploaded_designer:
+            fields[s.field_designer_image] = uploaded_designer
+    if s.field_source_category:
+        fields[s.field_source_category] = product.source_product_category or ""
+    if s.field_source_subcategory:
+        fields[s.field_source_subcategory] = product.source_product_subcategory or ""
     set_field("field_price", product.price)
 
     if brand_row_id and s.field_brand_link:
         fields[s.field_brand_link] = [brand_row_id]
 
     cat_ids, sub_ids = category_lookup.resolve(
-        product.product_category, product.sub_category
+        product.product_category,
+        product.sub_category,
+        auto_create_sub=_auto_create_subcategories(product),
     )
-    if cat_ids and s.field_product_category:
-        fields[s.field_product_category] = cat_ids
-    if sub_ids and s.field_sub_category:
-        fields[s.field_sub_category] = sub_ids
+    if s.field_product_category:
+        fields[s.field_product_category] = cat_ids if cat_ids else []
+    if s.field_sub_category:
+        fields[s.field_sub_category] = sub_ids if sub_ids else []
 
     if image_uploader:
         fields.update(build_image_fields(product, settings, image_uploader))
@@ -207,6 +344,10 @@ def save_product(
     """
     if not product.scrape_ok:
         raise ValueError(product.scrape_error or "scrape failed")
+
+    capture_source_categories(product)
+    normalize_product_categories(product)
+    apply_ai_descriptions_if_enabled(product, settings)
 
     fields = scraped_product_to_fields(
         product,
@@ -276,6 +417,11 @@ def save_products(
                 category_lookup=lookup,
                 image_uploader=image_uploader,
             )
+            cat_ids, sub_ids = lookup.resolve(
+                product.product_category,
+                product.sub_category,
+                auto_create_sub=_auto_create_subcategories(product),
+            )
             results.append(
                 {
                     "product_name": name,
@@ -284,6 +430,83 @@ def save_products(
                     "action": action,
                     "row_id": row_id,
                     "images_uploaded": images_uploaded,
+                    "category_ids": cat_ids,
+                    "subcategory_ids": sub_ids,
+                }
+            )
+        except Exception as exc:
+            results.append(
+                {
+                    "product_name": name,
+                    "product_url": product.product_url,
+                    "ok": False,
+                    "error": str(exc),
+                }
+            )
+
+    return results
+
+
+def update_product_categories(
+    client: BaserowClient,
+    settings: Settings,
+    products: list[ScrapedProduct],
+    brand_name: str,
+) -> list[dict[str, Any]]:
+    """Update only category link fields (+ source_*) for existing product rows."""
+    validate_products_table(client, settings)
+    brand_row_id = find_brand_row_id(client, settings, brand_name)
+    if brand_row_id is None:
+        raise ValueError(f"Brand not found in Baserow: {brand_name!r}")
+
+    lookup = CategoryLookup(client, settings)
+    results: list[dict[str, Any]] = []
+
+    for product in products:
+        name = product.product_name or product.product_url
+        try:
+            if not product.scrape_ok:
+                raise ValueError(product.scrape_error or "category fetch failed")
+
+            capture_source_categories(product)
+            normalize_product_categories(product)
+
+            existing = find_product_row_by_url(client, settings, product.product_url)
+            if not existing:
+                raise ValueError("product row not found in Baserow (scrape product first)")
+
+            cat_ids, sub_ids = lookup.resolve(
+                product.product_category,
+                product.sub_category,
+                auto_create_sub=_auto_create_subcategories(product),
+            )
+            fields: dict[str, Any] = {}
+            if settings.field_product_category:
+                fields[settings.field_product_category] = cat_ids if cat_ids else []
+            if settings.field_sub_category:
+                fields[settings.field_sub_category] = sub_ids if sub_ids else []
+            if settings.field_source_category:
+                fields[settings.field_source_category] = (
+                    product.source_product_category or ""
+                )
+            if settings.field_source_subcategory:
+                fields[settings.field_source_subcategory] = (
+                    product.source_product_subcategory or ""
+                )
+
+            row_id = existing["id"]
+            client.update_row(settings.products_table_id, row_id, fields)
+            results.append(
+                {
+                    "product_name": name,
+                    "product_url": product.product_url,
+                    "ok": True,
+                    "action": "updated",
+                    "row_id": row_id,
+                    "product_category": product.product_category,
+                    "sub_category": product.sub_category,
+                    "category_ids": cat_ids,
+                    "subcategory_ids": sub_ids,
                 }
             )
         except Exception as exc:
