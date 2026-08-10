@@ -444,6 +444,18 @@ def normalize_product_categories(product: ScrapedProduct, site_url: str = "") ->
         product.sub_category = (sub or "").strip()
         return
 
+    if host.endswith("csrugs.com"):
+        # Collection breadcrumb only — no static invent mapping.
+        product.product_category = (cat or "").strip()
+        product.sub_category = (sub or "").strip()
+        return
+
+    if host.endswith("eyye.nl"):
+        # Breadcrumb Banken/Fauteuils/Accessoires only — no static invent.
+        product.product_category = (cat or "").strip()
+        product.sub_category = (sub or "").strip()
+        return
+
     if host.endswith("label.nl"):
         seg = (product.source_product_category or cat or "").strip()
         product.product_category = label_category_from_segment(seg) if seg else (cat or "").strip()

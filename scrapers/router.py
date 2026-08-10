@@ -19,6 +19,7 @@ DOMAIN_MODULES: dict[str, str] = {
     "beekcollection.nl": "beek",
     "bertplantagie.com": "bert_plantagie",
     "castelijn.nl": "castelijn",
+    "leolux.nl": "leolux",
     "pode.eu": "pode",
     "label.nl": "label",
     "tonone.com": "tonone",
@@ -36,6 +37,8 @@ DOMAIN_MODULES: dict[str, str] = {
     "brinkercarpets.nl": "brinker",
     "fontanaarte.com": "fontanaarte",
     "gazzda.com": "gazzda",
+    "csrugs.com": "csrugs",
+    "eyye.nl": "eyye",
 }
 
 ROUTER_DEFAULT_URLS: dict[str, str] = {
@@ -52,6 +55,7 @@ ROUTER_DEFAULT_URLS: dict[str, str] = {
     "beekcollection.nl": "https://www.beekcollection.nl",
     "bertplantagie.com": "https://www.bertplantagie.com",
     "castelijn.nl": "https://www.castelijn.nl",
+    "leolux.nl": "https://www.leolux.nl",
     "houseofdutchz.nl": "https://www.houseofdutchz.nl",
     "estiluz.com": "https://www.estiluz.com",
     "harvink.nl": "https://www.harvink.nl",
@@ -64,6 +68,8 @@ ROUTER_DEFAULT_URLS: dict[str, str] = {
     "brinkercarpets.nl": "https://www.brinker.nl",
     "fontanaarte.com": "https://www.fontanaarte.com",
     "gazzda.com": "https://www.gazzda.com",
+    "csrugs.com": "https://www.csrugs.com",
+    "eyye.nl": "https://www.eyye.nl",
 }
 
 ROUTER_BRAND_HINTS: dict[str, str] = {
@@ -72,6 +78,15 @@ ROUTER_BRAND_HINTS: dict[str, str] = {
     "tonone.com": "tonone",
     "gealux.nl": "gealux",
     "carpetrebel.com": "carpetrebel",
+    "spectrumdesign.nl": "spectrum",
+    "designonstock.com": "design on stock",
+    "sleepworldhelmond.nl": "sleepworld",
+    "artifort.com": "artifort",
+    "baenks.nl": "baenks",
+    "beekcollection.nl": "beek",
+    "bertplantagie.com": "bert plantagie",
+    "castelijn.nl": "castelijn",
+    "leolux.nl": "leolux",
     "houseofdutchz.nl": "houseofdutchz",
     "estiluz.com": "estiluz",
     "harvink.nl": "harvink",
@@ -84,6 +99,8 @@ ROUTER_BRAND_HINTS: dict[str, str] = {
     "brinkercarpets.nl": "brinker",
     "fontanaarte.com": "fontanaarte",
     "gazzda.com": "gazzda",
+    "csrugs.com": "csrugs",
+    "eyye.nl": "eyye",
 }
 
 
@@ -156,6 +173,10 @@ def get_scraper_module(site_url: str):
         from scrapers import fontanaarte as mod
     elif name == "gazzda":
         from scrapers import gazzda as mod
+    elif name == "csrugs":
+        from scrapers import csrugs as mod
+    elif name == "eyye":
+        from scrapers import eyye as mod
     else:
         from scrapers import spectrum as mod
 

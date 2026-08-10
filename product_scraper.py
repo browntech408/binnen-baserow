@@ -104,6 +104,9 @@ def scrape_product_page(
     product.product_name = h1.get_text(strip=True) if h1 else _slug_to_title(final_url)
 
     product.product_description = _main_paragraphs(soup, h1)
+    from scrapers.text_clean import clean_product_description
+
+    product.product_description = clean_product_description(product.product_description)
 
     product.designer, product.designerDescription = _parse_designer(soup)
     product.price = _find_price(soup)
@@ -114,11 +117,9 @@ def scrape_product_page(
     normalize_product_categories(product)
 
     images = _collect_product_images(soup, h1, final_url)
-    product.product_images = images
-    if images:
-        product.hero_images = [images[0]]
-        product.lifestyle_images = images[1:4] if len(images) > 1 else []
-        product.detail_image = images[-1] if len(images) > 2 else ""
+    from scrapers.image_bg import assign_images_by_background
+
+    assign_images_by_background(product, images, timeout=timeout)
 
     return product
 

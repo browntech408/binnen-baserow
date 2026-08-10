@@ -225,17 +225,21 @@ def assign_images_by_background(
     preview_url: Callable[[str], str] | None = None,
     lifestyle_hints: tuple[str, ...] = DEFAULT_LIFESTYLE_HINTS,
 ) -> None:
-    product_shots, lifestyle_shots = split_images_by_background(
+    """All images → product_images; white/no-bg → hero; coloured bg → lifestyle."""
+    if not urls:
+        product.product_images = []
+        product.hero_images = []
+        product.lifestyle_images = []
+        product.detail_image = ""
+        return
+
+    hero_shots, lifestyle_shots = split_images_by_background(
         urls,
         timeout,
         preview_url=preview_url,
         lifestyle_hints=lifestyle_hints,
     )
-    product.product_images = product_shots
+    product.product_images = list(urls)
+    product.hero_images = hero_shots
     product.lifestyle_images = lifestyle_shots
-    product.hero_images = (
-        [product_shots[0]]
-        if product_shots
-        else ([lifestyle_shots[0]] if lifestyle_shots else [])
-    )
-    product.detail_image = product_shots[-1] if len(product_shots) > 2 else ""
+    product.detail_image = hero_shots[-1] if len(hero_shots) > 2 else ""

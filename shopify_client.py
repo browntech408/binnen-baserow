@@ -236,6 +236,94 @@ class ShopifyClient:
             )
         return resp.json().get("product") or {}
 
+    def update_product(
+        self, product_id: int, fields: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update product fields (title, body_html, vendor, etc.) via REST PUT."""
+        resp = self._request(
+            "PUT",
+            f"/products/{product_id}.json",
+            json_body={"product": {"id": product_id, **fields}},
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(
+                f"Update product {product_id} failed ({resp.status_code}): "
+                f"{resp.text[:500]}"
+            )
+        return resp.json().get("product") or {}
+
+    def set_metafields_graphql(
+        self, owner_id: str, metafields: list[dict[str, Any]]
+    ) -> tuple[int, int, list[str]]:
+        """Upsert metafields via GraphQL metafieldsSet (handles create + update).
+
+        Tries batch first; on failure, retries each metafield individually
+        so one conflict doesn't block the rest.
+
+        Args:
+            owner_id: Full GID, e.g. "gid://shopify/Product/12345"
+            metafields: List of dicts with keys: namespace, key, value, type
+
+        Returns:
+            (ok_count, failed_count, error_messages)
+        """
+        if not metafields:
+            return 0, 0, []
+        mutation = (
+            "mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {"
+            "  metafieldsSet(metafields: $metafields) {"
+            "    metafields { id namespace key value }"
+            "    userErrors { field message }"
+            "  }"
+            "}"
+        )
+        inputs = [
+            {
+                "ownerId": owner_id,
+                "namespace": mf["namespace"],
+                "key": mf["key"],
+                "value": str(mf["value"]),
+                "type": mf["type"],
+            }
+            for mf in metafields
+            if mf.get("value") not in (None, "")
+        ]
+        if not inputs:
+            return 0, 0, []
+
+        # Try batch first
+        try:
+            data = self.graphql(mutation, {"metafields": inputs})
+            result = data.get("metafieldsSet") or {}
+            user_errors = result.get("userErrors") or []
+            if not user_errors:
+                ok_count = len(result.get("metafields") or [])
+                return ok_count, 0, []
+        except RuntimeError:
+            pass  # Fall through to individual retry
+
+        # Batch failed — retry each metafield individually
+        ok = 0
+        failed = 0
+        errors: list[str] = []
+        for inp in inputs:
+            try:
+                data = self.graphql(mutation, {"metafields": [inp]})
+                result = data.get("metafieldsSet") or {}
+                ue = result.get("userErrors") or []
+                if ue:
+                    key = inp.get("key", "?")
+                    msg = "; ".join(str(e.get("message") or e) for e in ue)
+                    errors.append(f"{key}: {msg}")
+                    failed += 1
+                else:
+                    ok += 1
+            except RuntimeError as exc:
+                key = inp.get("key", "?")
+                errors.append(f"{key}: {exc}")
+                failed += 1
+        return ok, failed, errors
+
     def create_product_metafield(
         self, product_id: int, metafield: dict[str, Any]
     ) -> dict[str, Any]:

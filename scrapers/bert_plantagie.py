@@ -15,6 +15,7 @@ from brand_scraper import DEFAULT_HEADERS
 from product_schema import ScrapedProduct
 from product_scraper import _find_price, _parse_categories, _parse_designer, _slug_to_title
 from scrapers.extract_common import collect_product_images
+from scrapers.image_bg import assign_images_by_background
 from scrapers.taxonomy import capture_source_categories, normalize_product_categories
 from scrapers.text_clean import clean_product_description, is_junk_paragraph
 from scrapers.woocommerce import _listing_categories, _parse_woocommerce_breadcrumb, discover_product_urls
@@ -69,11 +70,7 @@ def scrape_product_page(product_url: str, brand_name: str, timeout: float) -> Sc
     product.product_category, product.sub_category = _parse_categories(soup, h1, final_url)
 
     images = collect_product_images(soup, h1, final_url)
-    product.product_images = images
-    if images:
-        product.hero_images = [images[0]]
-        product.lifestyle_images = images[1:4] if len(images) > 1 else []
-        product.detail_image = images[-1] if len(images) > 2 else ""
+    assign_images_by_background(product, images, timeout=timeout)
 
     key = final_url
     listing = _listing_categories.get(key)

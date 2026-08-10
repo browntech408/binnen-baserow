@@ -146,7 +146,7 @@ def scrape_product_page(product_url: str, brand_name: str, timeout: float) -> Sc
     soup = BeautifulSoup(resp.content, "lxml", from_encoding="utf-8")
 
     product = scrape_product_page_from_response(
-        resp, brand_name, skip_categories=True
+        resp, brand_name, skip_categories=True, classify_images=False
     )
     if not product.scrape_ok:
         return product

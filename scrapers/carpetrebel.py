@@ -251,6 +251,7 @@ def assign_carpetrebel_images(
         product.product_images = []
         product.hero_images = []
         product.lifestyle_images = []
+        product.detail_image = ""
         return
 
     hero_shots, lifestyle_shots = split_images_by_background(
@@ -258,9 +259,10 @@ def assign_carpetrebel_images(
         timeout=timeout,
         lifestyle_hints=CARPETREBEL_LIFESTYLE_HINTS,
     )
-    product.product_images = urls
+    product.product_images = list(urls)
     product.hero_images = hero_shots
     product.lifestyle_images = lifestyle_shots
+    product.detail_image = hero_shots[-1] if len(hero_shots) > 2 else ""
 
 
 def scrape_product_categories(

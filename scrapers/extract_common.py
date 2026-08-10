@@ -21,6 +21,7 @@ from product_scraper import (
     _parse_designer,
     _slug_to_title,
 )
+from scrapers.image_bg import assign_images_by_background
 from scrapers.taxonomy import capture_source_categories, normalize_product_categories
 from scrapers.text_clean import clean_product_description, is_junk_paragraph
 
@@ -160,6 +161,8 @@ def scrape_product_page_from_response(
     brand_name: str,
     *,
     skip_categories: bool = False,
+    timeout: float = 30,
+    classify_images: bool = True,
 ) -> ScrapedProduct:
     """Parse one HTTP response into ScrapedProduct (single fetch per page)."""
     product = ScrapedProduct(
@@ -188,11 +191,10 @@ def scrape_product_page_from_response(
         normalize_product_categories(product)
 
     images = collect_product_images(soup, h1, final_url)
-    product.product_images = images
-    if images:
-        product.hero_images = [images[0]]
-        product.lifestyle_images = images[1:4] if len(images) > 1 else []
-        product.detail_image = images[-1] if len(images) > 2 else ""
+    if classify_images:
+        assign_images_by_background(product, images, timeout=timeout)
+    else:
+        product.product_images = images
 
     return product
 
@@ -213,4 +215,4 @@ def scrape_product_page_common(
         product.scrape_error = str(exc)
         return product
 
-    return scrape_product_page_from_response(resp, brand_name)
+    return scrape_product_page_from_response(resp, brand_name, timeout=timeout)

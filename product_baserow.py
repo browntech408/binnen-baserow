@@ -46,7 +46,13 @@ def _norm_name(name: str) -> str:
 def _auto_create_subcategories(product: ScrapedProduct) -> bool:
     """Brand breadcrumb taxonomy — create missing rows in 807 when saving."""
     host = urlparse(product.product_url or "").netloc.lower().replace("www.", "")
-    return host in {"tonone.com", "gealux.nl", "label.nl", "carpetrebel.com"}
+    return host in {
+        "tonone.com",
+        "gealux.nl",
+        "label.nl",
+        "carpetrebel.com",
+        "csrugs.com",
+    }
 
 
 def _map_category_name(name: str) -> str:
