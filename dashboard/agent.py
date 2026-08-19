@@ -178,6 +178,40 @@ AGENT_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "update_shopify_product",
+            "description": "Update live Shopify product fields such as title, body_html, vendor, product_type, tags, or status.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_id": {"type": "integer", "description": "Shopify Numeric Product ID"},
+                    "title": {"type": "string", "description": "Updated title"},
+                    "body_html": {"type": "string", "description": "Updated HTML description"},
+                    "vendor": {"type": "string", "description": "Updated Brand/Vendor name"},
+                    "product_type": {"type": "string", "description": "Updated product category/type"},
+                    "tags": {"type": "string", "description": "Comma separated tags"},
+                    "status": {"type": "string", "enum": ["active", "draft", "archived"]}
+                },
+                "required": ["product_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sync_baserow_product_to_shopify",
+            "description": "Sync and publish a Baserow catalog item to Shopify Woonbloq storefront by Baserow Row ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "row_id": {"type": "integer", "description": "Baserow Row ID to sync"}
+                },
+                "required": ["row_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "update_shopify_inventory",
             "description": "Update available inventory stock quantity in Shopify.",
             "parameters": {
@@ -643,16 +677,34 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         elif name == "search_baserow_products":
             settings = load_settings()
             client = BaserowClient(settings)
-            limit = min(args.get("limit", 10), 50)
+            limit = min(args.get("limit", 15), 50)
             params = {"size": limit, "user_field_names": "true"}
             if args.get("search"):
                 params["search"] = args["search"]
             resp = client.session.get(f"{settings.api_base}/database/rows/table/{settings.products_table_id}/", params=params, timeout=30)
             data = resp.json()
+            raw_results = data.get("results", [])
+            summarized = []
+            for r in raw_results:
+                b_links = r.get("Brand_table") or r.get("field_7376") or r.get("brands") or []
+                brand_name = b_links[0].get("value") if (b_links and isinstance(b_links[0], dict)) else "—"
+                cat_links = r.get("product_category") or r.get("field_7363") or []
+                cat_name = cat_links[0].get("value") if (cat_links and isinstance(cat_links[0], dict)) else "—"
+                summarized.append({
+                    "id": r["id"],
+                    "title": r.get("product_name") or r.get("field_7347") or f"Product #{r['id']}",
+                    "brand": brand_name,
+                    "category": cat_name,
+                    "score": r.get("Score") or r.get("field_7394") or "—",
+                    "status": r.get("Status") or r.get("field_7353") or "—",
+                    "designer": r.get("Designer") or r.get("field_7356") or "—",
+                    "shopify_id": r.get("WoonbloqProductID") or r.get("field_7425") or "Not Linked",
+                })
             return {
                 "success": True,
                 "count": data.get("count", 0),
-                "results": data.get("results", [])
+                "matches_found": len(summarized),
+                "products": summarized
             }
 
         # 6. Single Row
@@ -664,16 +716,37 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
 
         # 7. Update Row
         elif name == "update_baserow_product":
-            if not args.get("confirm"):
-                return {
-                    "success": False,
-                    "requires_confirmation": True,
-                    "message": f"Confirmation required to update Baserow Row ID {args['row_id']} with {args.get('fields')}."
-                }
             settings = load_settings()
             client = BaserowClient(settings)
-            updated = client.update_row(settings.products_table_id, args["row_id"], args["fields"])
-            return {"success": True, "updated": updated}
+            raw_fields = args.get("fields", {})
+            mapped_fields = {}
+            for k, v in raw_fields.items():
+                norm_k = k.lower().strip().replace(" ", "_")
+                if norm_k in BASEROW_FIELD_MAP:
+                    mapped_fields[BASEROW_FIELD_MAP[norm_k]] = v
+                elif k.startswith("field_"):
+                    mapped_fields[k] = v
+                else:
+                    mapped_fields[k] = v
+
+            # Fetch old row values
+            old_vals = {}
+            try:
+                old_row = client.get_row(settings.products_table_id, args["row_id"])
+                for k in raw_fields:
+                    f_key = mapped_fields.get(k, k)
+                    old_vals[k] = old_row.get(f_key)
+            except Exception:
+                pass
+
+            updated = client.update_row(settings.products_table_id, args["row_id"], mapped_fields)
+            return {
+                "success": True,
+                "row_id": args["row_id"],
+                "updated_fields": raw_fields,
+                "previous_values": old_vals,
+                "updated_row": updated
+            }
 
         # 8. Search Shopify
         elif name == "search_shopify_products":
@@ -698,14 +771,47 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             resp = requests.get(f"{cfg.admin_base}/products/{args['product_id']}.json", headers=headers, timeout=30)
             return {"success": True, "product": resp.json().get("product", {})}
 
-        # 10. Update Inventory
+        # 10. Update Shopify Product
+        elif name == "update_shopify_product":
+            cfg = load_shopify_config()
+            headers = {"X-Shopify-Access-Token": cfg.access_token, "Content-Type": "application/json"}
+            payload = {"product": {}}
+            for field in ["title", "body_html", "vendor", "product_type", "tags", "status"]:
+                if field in args and args[field] is not None:
+                    payload["product"][field] = args[field]
+            resp = requests.put(f"{cfg.admin_base}/products/{args['product_id']}.json", headers=headers, json=payload, timeout=30)
+            if not resp.ok:
+                return {"success": False, "error": resp.text}
+            return {"success": True, "product": resp.json().get("product", {})}
+
+        # 11. Sync Baserow Product to Shopify
+        elif name == "sync_baserow_product_to_shopify":
+            from send_to_shopify import TABLE_742, _prepare_product_data, _create_product, _update_product
+            settings = load_settings()
+            baserow = BaserowClient(settings)
+            shopify = ShopifyClient()
+            row = baserow.get_row(TABLE_742.table_id, args["row_id"])
+            data = _prepare_product_data(row, TABLE_742, baserow)
+            if not data["title"]:
+                return {"success": False, "error": "Product has no name/title in Baserow"}
+            if data["woonbloq_product_id"]:
+                _update_product(row, TABLE_742, data, shopify=shopify, dry_run=False)
+                action = "updated"
+                shopify_id = data["woonbloq_product_id"]
+            else:
+                _create_product(row, TABLE_742, data, shopify=shopify, baserow=baserow, dry_run=False)
+                action = "created"
+                fresh_row = baserow.get_row(TABLE_742.table_id, args["row_id"])
+                shopify_id = fresh_row.get(TABLE_742.woonbloq_product_id) or "Assigned"
+            return {
+                "success": True,
+                "action": action,
+                "product_title": data["title"],
+                "shopify_id": shopify_id
+            }
+
+        # 12. Update Inventory
         elif name == "update_shopify_inventory":
-            if args.get("available") == 0 and not args.get("confirm"):
-                return {
-                    "success": False,
-                    "requires_confirmation": True,
-                    "message": "Confirmation required: Setting inventory to 0 will mark item as Out of Stock on Shopify."
-                }
             cfg = load_shopify_config()
             headers = {"X-Shopify-Access-Token": cfg.access_token, "Content-Type": "application/json"}
             loc_resp = requests.get(f"{cfg.admin_base}/locations.json", headers=headers, timeout=30)
@@ -745,11 +851,11 @@ def run_agent_chat(messages: list[dict[str, Any]], model: str = "anthropic/claud
 
     system_prompt = (
         "You are an executive AI Catalog & Multi-Storefront Intelligence Assistant for Binnen / Woonbloq.\n"
-        "You have direct real-time API access to the live Baserow Master Catalog and the live Shopify Woonbloq storefront.\n\n"
+        "You have direct real-time API access to the live Baserow catalog and the live Shopify Woonbloq storefront.\n\n"
         "DATABASE PRIVACY & TERMINOLOGY RULES:\n"
         "- NEVER mention third-party AI model names (such as Claude, Anthropic, GPT, OpenAI, etc.). You are exclusively the 'Binnen Catalog OS Copilot' or 'Binnen Autonomous AI'.\n"
         "- NEVER mention internal database table IDs (like Table 742, Table 785, field_7347, field_7376, etc.) or technical API parameter names to the user.\n"
-        "- Always refer to the central system as 'Baserow Master Catalog' and the ecommerce store as 'Woonbloq Shopify Storefront'.\n"
+        "- Always refer to the central system as 'Baserow' and the ecommerce store as 'Woonbloq Shopify Storefront'.\n"
         "- SOURCE URL PRIVACY: NEVER display, output, or link to external original supplier or scraped website URLs. All catalog items belong to Baserow & Woonbloq storefront.\n\n"
         "TOOL ROUTING RULES (ALWAYS call the exact appropriate tool before answering):\n"
         "1. 'How many total products in Shopify?' or 'Shopify total product count' → call `get_shopify_catalog_stats`\n"
@@ -761,6 +867,34 @@ def run_agent_chat(messages: list[dict[str, Any]], model: str = "anthropic/claud
         "7. 'How many products in Baserow where price is empty / missing?' → call `query_baserow_products_filtered` with field_name='price' and condition='empty'\n"
         "8. 'How many products in Baserow are missing Dutch AI descriptions?' → call `query_baserow_products_filtered` with field_name='ai_description_translated_NL' and condition='empty'\n"
         "9. 'Overall sync coverage or health between Baserow & Shopify' → call `get_catalog_overview`\n\n"
+        "PRODUCT UPDATE & DISAMBIGUATION PROTOCOL (WHEN USER REQUESTS AN UPDATE):\n"
+        "When the user asks to update ANY column/attribute of a product (e.g. Score, Title, Description, Dutch AI Translation, Designer, Category, Status, Ready to Sync flag, or Shopify Inventory/Status):\n"
+        "1. FIRST: Call `search_baserow_products(search='[product name / keyword]')` to find candidate matching products.\n"
+        "2. CASE A - ZERO MATCHES (0 products found):\n"
+        "   - Inform the user that no products matched the given name. Suggest searching with broader terms or providing the Item ID (e.g. #8).\n"
+        "3. CASE B - MULTIPLE CANDIDATES FOUND (>1 products):\n"
+        "   - DO NOT assume or update all products! You must let the user disambiguate which item they meant.\n"
+        "   - Present a clean Markdown Table of all candidate matches:\n"
+        "     | Item ID | Product Title | Brand | Current [Field] | Category |\n"
+        "   - Ask clearly:\n"
+        "     \"Multiple matching products were found for '**[name]**'. Please select which **Item ID** you would like to update (e.g. 'Update #8 score to 95').\"\n"
+        "4. CASE C - EXACT MATCH (1 product found OR specific Item ID given by user):\n"
+        "   - Immediately call `update_baserow_product(row_id=..., fields={'[field_name]': [new_value]})` to commit the change.\n"
+        "   - DO NOT output a multi-row confirmation table. Instead, provide a clean, executive confirmation bullet summary showing the exact value change:\n"
+        "     **[Update Confirmed]**\n\n"
+        "     - **Product:** **[Title]** (Item #[ID]) — [Brand]\n"
+        "     - **[Field Name] Update:** Changed from `[Old Value]` to **`[New Value]`**\n"
+        "     - **Database Status:** Baserow updated successfully\n"
+        "UNSUPPORTED ACTIONS & FEATURE PROTOCOL:\n"
+        "If the user requests an action, operation, or feature that is NOT currently built into your available tools (such as 'duplicate product', 'delete product/row', 'bulk delete', 'export PDF/Excel', 'merge products', etc.):\n"
+        "1. DO NOT generate technical errors, crash, or attempt invalid tool arguments.\n"
+        "2. Provide a polite, executive, professional message informing the user that this feature is currently not supported in Binnen Catalog OS Copilot:\n"
+        "   **[Action Notice] Feature Currently Not Supported**\n\n"
+        "   The requested action '**[Action Requested]**' is currently not supported by the Binnen Catalog OS Copilot.\n\n"
+        "   **Available Supported Operations:**\n"
+        "   - **Product Updates:** Modify Score, Price, Title, Description, Status, Designer, Category, or Ready to Sync flag.\n"
+        "   - **Shopify Sync:** Publish & update products/metafields to live Woonbloq Storefront.\n"
+        "   - **Catalog & Inventory Audits:** Search products, filter stock, missing descriptions/prices, and view sync health.\n\n"
         "PROFESSIONAL RESPONSE FORMATTING & DESIGN RULES:\n"
         "- Present every response in executive C-level report styling with clean headings.\n"
         "- MANDATORY: For all breakdowns, metrics, and lists of items, ALWAYS use standard Markdown Tables (`| Col 1 | Col 2 | ... |`).\n"
@@ -772,11 +906,6 @@ def run_agent_chat(messages: list[dict[str, Any]], model: str = "anthropic/claud
         "  - [Untracked Inventory]\n"
         "  - [Zero Stock / Out of Stock]\n"
         "  - [Draft / Pending Sync]\n"
-        "- When auditing a vendor (e.g. Spectrum Design):\n"
-        "  1. Start with an executive summary heading with Brand Name, Total Products, and Storefront name.\n"
-        "  2. Provide a 5-column Status & Inventory Markdown Table (Status | Total Products | In Stock (Qty > 0) | Zero Stock (Qty <= 0) | Untracked Stock).\n"
-        "  3. Provide Key Insights (bullet points explaining active status, whether inventory is tracked or untracked).\n"
-        "  4. Provide a Sample Products Markdown Table with Product Title, Status, Price (€), and Inventory Status.\n"
         "- Keep the tone authoritative, concise, helpful, and strictly professional."
     )
 

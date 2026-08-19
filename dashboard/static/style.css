@@ -1759,9 +1759,9 @@ html, body {
 /* Toast */
 .toast-stack {
   position: fixed;
-  bottom: 20px;
+  top: 20px;
   right: 20px;
-  z-index: 500;
+  z-index: 2000;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1784,7 +1784,7 @@ html, body {
 .toast-item.error { border-color: var(--rose-500); color: #fb7185; }
 
 @keyframes slideInToast {
-  from { transform: translateY(20px); opacity: 0; }
+  from { transform: translateY(-20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 

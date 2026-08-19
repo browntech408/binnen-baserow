@@ -198,16 +198,15 @@
           <table class="enterprise-table">
             <thead>
               <tr>
-                <th style="width: 320px;">Product / Title</th>
-                <th style="width: 190px;">Brand &amp; Hierarchy</th>
-                <th style="width: 130px;">Price (€)</th>
-                <th style="width: 170px;">Shopify Sync State</th>
-                <th style="width: 110px; text-align: right;">Actions</th>
+                <th style="width: 360px;">Product / Title</th>
+                <th style="width: 220px;">Brand &amp; Hierarchy</th>
+                <th style="width: 190px;">Shopify Sync State</th>
+                <th style="width: 120px; text-align: right;">Actions</th>
               </tr>
             </thead>
             <tbody id="productsTableBody">
               <tr>
-                <td colspan="5" class="table-state-row">
+                <td colspan="4" class="table-state-row">
                   <div class="loading-spinner"></div>
                   <span>Loading Baserow products...</span>
                 </td>
@@ -385,10 +384,6 @@
             <span class="spec-value" id="drawerBrand">—</span>
           </div>
           <div class="spec-cell">
-            <span class="spec-label">Price</span>
-            <span class="spec-value text-cyan" id="drawerPrice">€0.00</span>
-          </div>
-          <div class="spec-cell">
             <span class="spec-label">Category</span>
             <span class="spec-value" id="drawerCategory">—</span>
           </div>
@@ -455,16 +450,7 @@
       </div>
     </div>
 
-    <div class="slide-drawer-footer">
-      <button class="btn-action-primary" id="drawerSyncBtn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        Sync to Shopify Now
-      </button>
-      <button class="btn-action-secondary" id="drawerAskAIBtn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        Ask AI Copilot
-      </button>
-    </div>
+
   </aside>
 
   <!-- Security Guardrail Confirmation Modal -->

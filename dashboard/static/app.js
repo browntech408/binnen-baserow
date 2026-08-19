@@ -33,7 +33,7 @@ const state = {
       role: "assistant",
       content: `### Welcome to Binnen Catalog Intelligence
 
-I am your **Autonomous Multi-Storefront AI Copilot**, connected live to **Baserow Master Catalog** and **Shopify Woonbloq Storefront**.
+I am your **Autonomous Multi-Storefront AI Copilot**, connected live to **Baserow** and **Shopify Woonbloq Storefront**.
 
 Select an executive query below or type your own question:
 
@@ -122,7 +122,6 @@ const DOM = {
   drawerProductName: document.getElementById("drawerProductName"),
   drawerGallery: document.getElementById("drawerGallery"),
   drawerBrand: document.getElementById("drawerBrand"),
-  drawerPrice: document.getElementById("drawerPrice"),
   drawerCategory: document.getElementById("drawerCategory"),
   drawerSubcategory: document.getElementById("drawerSubcategory"),
   drawerDesigner: document.getElementById("drawerDesigner"),
@@ -273,17 +272,21 @@ function setupEventListeners() {
   DOM.closeDrawerBtn.addEventListener("click", closeDrawer);
   DOM.drawerBackdrop.addEventListener("click", closeDrawer);
 
-  DOM.drawerSyncBtn.addEventListener("click", async () => {
-    if (!state.selectedProduct) return;
-    await syncProductAction(state.selectedProduct.id);
-  });
+  if (DOM.drawerSyncBtn) {
+    DOM.drawerSyncBtn.addEventListener("click", async () => {
+      if (!state.selectedProduct) return;
+      await syncProductAction(state.selectedProduct.id);
+    });
+  }
 
-  DOM.drawerAskAIBtn.addEventListener("click", () => {
-    if (!state.selectedProduct) return;
-    const name = state.selectedProduct.field_7347 || state.selectedProduct.product_name || `Product #${state.selectedProduct.id}`;
-    closeDrawer();
-    usePrompt(`Inspect and explain full synchronization and stock status for Baserow item ID ${state.selectedProduct.id} (${name})`);
-  });
+  if (DOM.drawerAskAIBtn) {
+    DOM.drawerAskAIBtn.addEventListener("click", () => {
+      if (!state.selectedProduct) return;
+      const name = state.selectedProduct.field_7347 || state.selectedProduct.product_name || `Product #${state.selectedProduct.id}`;
+      closeDrawer();
+      usePrompt(`Inspect and explain full synchronization and stock status for Baserow item ID ${state.selectedProduct.id} (${name})`);
+    });
+  }
 
   // Chat events
   DOM.sendBtn.addEventListener("click", sendMessage);
@@ -545,7 +548,6 @@ function renderCatalog() {
       const catName = (catLinks.length > 0 && catLinks[0].value) ? catLinks[0].value : "";
       const subLinks = p.sub_category || p.field_7364 || [];
       const subName = (subLinks.length > 0 && subLinks[0].value) ? subLinks[0].value : "";
-      const price = p.price || p.field_7371 ? `€${p.price || p.field_7371}` : "—";
       const score = p.Score || p.field_7394 ? `Score: ${p.Score || p.field_7394}` : "";
       const woonbloqId = p.WoonbloqProductID || p.field_7425 || "";
       const isSynced = Boolean(woonbloqId && String(woonbloqId).trim());
@@ -574,11 +576,8 @@ function renderCatalog() {
             <div>
               <span class="brand-tag-cell">${escapeHtml(brandName)}</span>
               <div class="cat-sub-text">${escapeHtml(catName)}${subName ? ` › ${escapeHtml(subName)}` : ''}</div>
+              ${score ? `<div class="score-text" style="margin-top:2px;">${escapeHtml(score)}</div>` : ''}
             </div>
-          </td>
-          <td>
-            <div class="price-bold">${escapeHtml(price)}</div>
-            ${score ? `<div class="score-text">${escapeHtml(score)}</div>` : ''}
           </td>
           <td>
             <div>
@@ -593,10 +592,6 @@ function renderCatalog() {
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 View
               </button>
-              <button class="btn-table-action" onclick="syncProductAction(${p.id})" title="Sync to Shopify">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                Sync
-              </button>
             </div>
           </td>
         </tr>
@@ -610,7 +605,6 @@ function renderCatalog() {
       const name = p.product_name || p.field_7347 || p.Name || `Product #${p.id}`;
       const brandLinks = p.Brand_table || p.field_7376 || p.brands || [];
       const brandName = (brandLinks.length > 0 && brandLinks[0].value) ? brandLinks[0].value : "Brand";
-      const price = p.price || p.field_7371 ? `€${p.price || p.field_7371}` : "—";
       const woonbloqId = p.WoonbloqProductID || p.field_7425 || "";
       const isSynced = Boolean(woonbloqId && String(woonbloqId).trim());
 
@@ -626,7 +620,7 @@ function renderCatalog() {
             <div style="font-size: 11px; font-weight: 700; color: var(--cyan-400); text-transform: uppercase;">${escapeHtml(brandName)}</div>
             <div style="font-weight: 600; font-size: 13px; color: #fff; margin: 4px 0 10px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${escapeHtml(name)}</div>
             <div style="margin-top: auto; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-subtle); padding-top: 8px;">
-              <span class="price-bold">${escapeHtml(price)}</span>
+              <span class="row-tag-sm">ID: #${p.id}</span>
               ${isSynced ? '<span class="badge badge-green">Synced</span>' : '<span class="badge badge-yellow">Unlinked</span>'}
             </div>
           </div>
@@ -668,7 +662,6 @@ async function openProductDrawer(rowId) {
     // Specs
     const brandLinks = p.field_7376 || p.Brand_table || [];
     DOM.drawerBrand.textContent = (brandLinks.length > 0 && brandLinks[0].value) ? brandLinks[0].value : "—";
-    DOM.drawerPrice.textContent = p.field_7371 ? `€${p.field_7371}` : "—";
     
     const catLinks = p.field_7363 || p.product_category || [];
     DOM.drawerCategory.textContent = (catLinks.length > 0 && catLinks[0].value) ? catLinks[0].value : "—";
