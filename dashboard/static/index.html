@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Binnen Catalog OS | Enterprise Multi-Storefront Intelligence</title>
+  
+  <!-- Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  
+  <!-- Markdown & Code Highlighting Libraries for Pro AI Chat -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <!-- Top Command Bar Header -->
+  <header class="app-header">
+    <div class="header-brand-group">
+      <div class="brand-logo">
+        <div class="logo-shield">
+          <span class="logo-text">B</span>
+          <div class="shield-glow"></div>
+        </div>
+        <div class="brand-meta">
+          <div class="brand-name">BINNEN <span class="brand-tag">OS</span></div>
+          <div class="brand-desc">Enterprise Catalog &amp; AI Synchronization Engine</div>
+        </div>
+      </div>
+
+      <div class="store-selector-badge" title="Active Shopify Storefront">
+        <span class="store-dot"></span>
+        <span class="store-title">Woonbloq Shopify</span>
+        <span class="store-slug">ibz6u3-ss</span>
+      </div>
+    </div>
+
+    <!-- Center Quick Stat Badges -->
+    <div class="header-status-strip">
+      <div class="badge-pill live" title="Connected to Baserow Master Catalog">
+        <span class="pulse-indicator"></span>
+        <span class="badge-label">Master Catalog</span>
+        <span class="badge-val" id="hdrBaserowCount">Connecting...</span>
+      </div>
+      <div class="badge-pill shopify" title="Live Shopify Storefront Inventory">
+        <!-- Shopify bag icon -->
+        <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
+        </svg>
+        <span class="badge-label">Shopify Store</span>
+        <span class="badge-val" id="hdrShopifyCount">6,492 items</span>
+      </div>
+      <div class="badge-pill ai" title="Claude 3.5 Sonnet Autonomous Agent">
+        <!-- Sparkle / AI icon -->
+        <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+        </svg>
+        <span class="badge-label">AI Copilot</span>
+        <span class="badge-val">Claude 3.5 MCP</span>
+      </div>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="header-actions">
+      <button id="refreshBtn" class="btn-ghost icon-btn" title="Refresh Live Data">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+        </svg>
+      </button>
+      <div class="divider-v"></div>
+      <div class="user-profile-badge">
+        <div class="avatar-circle">AD</div>
+        <div class="user-info">
+          <span class="user-name">Admin Console</span>
+          <span class="user-role">Super Admin</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- App Main Screen Layout (Fixed Viewport, No Body Scroll) -->
+  <div class="app-main-layout">
+    
+    <!-- LEFT PANE: Catalog Explorer & KPI Dashboard -->
+    <main class="catalog-pane">
+      
+      <!-- Executive KPI Strip (Compact & Clean) -->
+      <section class="kpi-strip">
+        <div class="kpi-box" id="kpiBoxBaserow">
+          <div class="kpi-box-top">
+            <span class="kpi-title">Master Catalog</span>
+            <span class="kpi-badge blue">Baserow</span>
+          </div>
+          <div class="kpi-number" id="valBaserowProducts">—</div>
+          <div class="kpi-box-bottom">
+            <span class="text-dim">Active Brands:</span>
+            <strong id="valBaserowBrands" class="text-white">— Brands</strong>
+            <span class="kpi-status-dot"></span>
+          </div>
+        </div>
+
+        <div class="kpi-box" id="kpiBoxShopify">
+          <div class="kpi-box-top">
+            <span class="kpi-title">Shopify Woonbloq</span>
+            <span class="kpi-badge cyan">Storefront</span>
+          </div>
+          <div class="kpi-number" id="valShopifyTotal">6,492</div>
+          <div class="kpi-box-bottom">
+            <span class="status-micro green"><strong id="valShopifyActive">5,663</strong> Active</span>
+            <span class="status-micro amber"><strong id="valShopifyDraft">818</strong> Draft</span>
+            <span class="status-micro gray"><strong id="valShopifyArchived">11</strong> Arch</span>
+          </div>
+        </div>
+
+        <div class="kpi-box" id="kpiBoxSync">
+          <div class="kpi-box-top">
+            <span class="kpi-title">Sync Coverage Rate</span>
+            <span class="kpi-badge green" id="tagSyncPercent">100%</span>
+          </div>
+          <div class="kpi-number" id="valLinkedCount">—</div>
+          <div class="kpi-progress-bar">
+            <div class="bar-fill" id="progressBarSync" style="width: 100%;"></div>
+          </div>
+          <div class="kpi-box-bottom">
+            <span class="text-dim" id="valUnlinkedNotice">Checking synchronization...</span>
+          </div>
+        </div>
+
+        <div class="kpi-box" id="kpiBoxAgent">
+          <div class="kpi-box-top">
+            <span class="kpi-title">MCP Automation</span>
+            <span class="kpi-badge purple">Protected</span>
+          </div>
+          <div class="kpi-number">10 Tools</div>
+          <div class="kpi-box-bottom">
+            <span class="text-dim">Guardrail:</span>
+            <strong class="text-amber">Confirmation Active</strong>
+          </div>
+        </div>
+      </section>
+
+      <!-- Catalog Controls Toolbar -->
+      <section class="catalog-toolbar">
+        <div class="search-wrapper">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="searchInput" placeholder="Search by title, brand, URL, or row ID... (Press '/' to focus)" />
+          <button id="clearSearchBtn" class="clear-input-btn" style="display: none;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <span class="shortcut-key">/</span>
+        </div>
+
+        <div class="toolbar-actions">
+          <div class="select-wrapper">
+            <select id="brandSelect" class="styled-select">
+              <option value="">Filter by Brand (All 36)</option>
+            </select>
+          </div>
+
+          <div class="view-mode-buttons">
+            <button id="btnTableView" class="view-btn active" title="Data Table View">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            </button>
+            <button id="btnCardsView" class="view-btn" title="Visual Cards View">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Filter Tabs Strip -->
+      <nav class="catalog-tabs-bar">
+        <button class="nav-tab active" data-filter="all">
+          <span>All Products</span>
+          <span class="tab-pill-count" id="tabCountAll">6,481</span>
+        </button>
+        <button class="nav-tab" data-filter="linked">
+          <span class="status-dot-sm green"></span>
+          <span>Synced to Woonbloq</span>
+        </button>
+        <button class="nav-tab" data-filter="unlinked">
+          <span class="status-dot-sm amber"></span>
+          <span>Unlinked / Pending</span>
+        </button>
+        <button class="nav-tab" data-filter="ready_to_sync">
+          <span class="status-dot-sm cyan"></span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="margin-right:3px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Ready to Sync</span>
+        </button>
+      </nav>
+
+      <!-- Catalog Content Scroll Area -->
+      <div class="catalog-scroll-container">
+        
+        <!-- High-Density Enterprise Table View -->
+        <div id="tableViewContainer" class="table-container">
+          <table class="enterprise-table">
+            <thead>
+              <tr>
+                <th style="width: 320px;">Product / Title</th>
+                <th style="width: 190px;">Brand &amp; Hierarchy</th>
+                <th style="width: 130px;">Price (€)</th>
+                <th style="width: 170px;">Shopify Sync State</th>
+                <th style="width: 110px; text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="productsTableBody">
+              <tr>
+                <td colspan="5" class="table-state-row">
+                  <div class="loading-spinner"></div>
+                  <span>Loading Master Catalog products...</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Visual Product Cards Grid View -->
+        <div id="cardsViewContainer" class="cards-grid-container" style="display: none;"></div>
+      </div>
+
+      <!-- Pinned Pagination Footer -->
+      <footer class="catalog-pagination-bar">
+        <div class="pagination-summary" id="paginationInfo">
+          Showing <strong>1-12</strong> of <strong>6,481</strong> products
+        </div>
+
+        <div class="pagination-nav">
+          <button id="btnPrevPage" class="nav-arrow-btn" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Previous
+          </button>
+          <div class="page-selector">
+            <span>Page</span>
+            <input type="number" id="pageJumpInput" min="1" value="1" />
+            <span id="totalPagesText">of 541</span>
+          </div>
+          <button id="btnNextPage" class="nav-arrow-btn">
+            Next
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+
+        <div class="page-size-selector">
+          <span class="text-dim">Per page:</span>
+          <select id="pageSizeSelect" class="styled-select-sm">
+            <option value="12" selected>12</option>
+            <option value="24">24</option>
+            <option value="48">48</option>
+          </select>
+        </div>
+      </footer>
+    </main>
+
+    <!-- RIGHT PANE: Dedicated Professional AI Copilot -->
+    <aside class="ai-copilot-pane">
+      
+      <!-- AI Header with Model Selection -->
+      <header class="copilot-header">
+        <div class="copilot-profile">
+          <div class="ai-orb">
+            <div class="orb-core"></div>
+            <div class="orb-ring"></div>
+          </div>
+          <div>
+            <div class="copilot-title">Catalog Copilot</div>
+            <div class="copilot-subtitle">
+              <span class="live-pulse"></span>
+              <span>Claude 3.5 Sonnet • MCP Tools Live</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="copilot-header-actions">
+          <button id="clearChatBtn" class="btn-ghost icon-btn-sm" title="Clear Conversation">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Instant Prompt Chips -->
+      <div class="copilot-quick-prompts">
+        <div class="chips-header">Quick Automations &amp; Queries:</div>
+        <div class="chips-scroll">
+          <!-- Bar chart icon -->
+          <button class="prompt-chip" onclick="usePrompt('How many total products are in Shopify store and what is the breakdown by active, draft, and archived?')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg>
+            Shopify Total Products
+          </button>
+          <!-- Package icon -->
+          <button class="prompt-chip" onclick="usePrompt('How many products in Shopify have 0 stock or no inventory value entered?')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            Zero Stock Audit
+          </button>
+          <!-- Tag / price icon -->
+          <button class="prompt-chip" onclick="usePrompt('How many products in Master Catalog have empty price field?')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            Missing Price Audit
+          </button>
+          <!-- File text icon -->
+          <button class="prompt-chip" onclick="usePrompt('How many products in Master Catalog have missing Dutch AI descriptions?')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            Missing Descriptions
+          </button>
+          <!-- Link icon -->
+          <button class="prompt-chip" onclick="usePrompt('Show me the overall sync coverage between Master Catalog and Shopify')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Sync Coverage
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages Stream (Independently Scrollable, Never Leaves View) -->
+      <div class="copilot-chat-stream" id="chatMessages">
+        <!-- Messages rendered dynamically -->
+      </div>
+
+      <!-- AI Input Dock (Pinned at Bottom) -->
+      <footer class="copilot-input-dock">
+        <div class="input-container-glass">
+          <textarea id="chatInput" rows="1" placeholder="Ask AI to query total products, filter columns, check 0 stock, or sync items..."></textarea>
+          <button id="sendBtn" class="btn-send" title="Send (Enter)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+        <div class="input-shortcuts-hint">
+          <span>Press <strong>Enter ↵</strong> to send</span>
+          <span>•</span>
+          <span><strong>Shift+Enter</strong> for new line</span>
+        </div>
+      </footer>
+    </aside>
+  </div>
+
+  <!-- Slide-Over Product Detail Drawer -->
+  <div class="drawer-overlay" id="drawerBackdrop"></div>
+  <aside class="slide-drawer" id="productDrawer">
+    <div class="slide-drawer-header">
+      <div class="drawer-title-group">
+        <span class="row-tag" id="drawerRowId">Item #</span>
+        <h3 id="drawerProductName" class="drawer-title">Product Title</h3>
+      </div>
+      <button id="closeDrawerBtn" class="btn-close-drawer" title="Close Drawer (Esc)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="slide-drawer-body">
+      <!-- Media Gallery -->
+      <div class="drawer-card">
+        <div class="drawer-card-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Product Media Gallery
+        </div>
+        <div class="drawer-media-gallery" id="drawerGallery"></div>
+      </div>
+
+      <!-- Core Specifications -->
+      <div class="drawer-card">
+        <div class="drawer-card-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg>
+          Core Specifications
+        </div>
+        <div class="specs-grid-2col">
+          <div class="spec-cell">
+            <span class="spec-label">Brand</span>
+            <span class="spec-value" id="drawerBrand">—</span>
+          </div>
+          <div class="spec-cell">
+            <span class="spec-label">Price</span>
+            <span class="spec-value text-cyan" id="drawerPrice">€0.00</span>
+          </div>
+          <div class="spec-cell">
+            <span class="spec-label">Category</span>
+            <span class="spec-value" id="drawerCategory">—</span>
+          </div>
+          <div class="spec-cell">
+            <span class="spec-label">Subcategory</span>
+            <span class="spec-value" id="drawerSubcategory">—</span>
+          </div>
+          <div class="spec-cell">
+            <span class="spec-label">Designer</span>
+            <span class="spec-value" id="drawerDesigner">—</span>
+          </div>
+          <div class="spec-cell">
+            <span class="spec-label">Score</span>
+            <span class="spec-value" id="drawerScore">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Storefront Sync Status -->
+      <div class="drawer-card sync-highlight-card">
+        <div class="drawer-card-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+          Storefront Integration
+        </div>
+        <div class="sync-rows-list">
+          <div class="sync-row-item">
+            <span>Shopify Woonbloq ID:</span>
+            <strong class="font-mono text-cyan" id="drawerWoonbloqId">Not Linked</strong>
+          </div>
+          <div class="sync-row-item">
+            <span>Sync Status:</span>
+            <span class="badge" id="drawerWoonbloqStatus">Pending</span>
+          </div>
+          <div class="sync-row-item">
+            <span>Ready to Sync Flag:</span>
+            <span id="drawerReadyFlag">False</span>
+          </div>
+          <div class="sync-row-item" id="drawerUrlRow">
+            <span>Original Source URL:</span>
+            <a href="#" target="_blank" id="drawerProductUrl" class="link-external">
+              Open Website
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Descriptions (Original vs AI NL) -->
+      <div class="drawer-card">
+        <div class="drawer-card-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Product Descriptions
+        </div>
+        <div class="desc-stack">
+          <div class="desc-block">
+            <div class="desc-tag">Original Scraped Text</div>
+            <div class="desc-text" id="drawerDescOriginal">No description available.</div>
+          </div>
+          <div class="desc-block ai-block">
+            <div class="desc-tag ai-tag">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:4px"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
+              Dutch AI Rewritten Description (NL)
+            </div>
+            <div class="desc-text ai-text" id="drawerDescAI">No Dutch AI translation generated yet.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-drawer-footer">
+      <button class="btn-action-primary" id="drawerSyncBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Sync to Shopify Now
+      </button>
+      <button class="btn-action-secondary" id="drawerAskAIBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Ask AI Copilot
+      </button>
+    </div>
+  </aside>
+
+  <!-- Security Guardrail Confirmation Modal -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal-dialog">
+      <div class="modal-dialog-header">
+        <div class="warning-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div>
+          <h4 class="modal-heading">Executive Security Guardrail</h4>
+          <p class="modal-subheading">Write operation requires administrative confirmation</p>
+        </div>
+      </div>
+      <div class="modal-dialog-body">
+        <p id="confirmModalMsg" class="modal-prompt-text"></p>
+        <div class="code-preview-box" id="modalPayloadPreview"></div>
+      </div>
+      <div class="modal-dialog-footer">
+        <button class="btn-modal-cancel" id="modalCancelBtn">Cancel Action</button>
+        <button class="btn-modal-confirm" id="modalConfirmBtn">Authorize &amp; Execute</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-stack" id="toastContainer"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -412,6 +412,91 @@ def handle_sync_clean():
     return html, status_code
 
 
+# Bulk Sync endpoint
+# URL pattern: /bulk-sync?table_id=742
+@app.route("/bulk-sync", methods=["GET", "POST"])
+def handle_bulk_sync():
+    table_id_str = request.args.get("table_id")
+    if not table_id_str:
+        return _html_response("Missing Table ID", "Provide table_id (e.g. ?table_id=742)", status="error"), 400
+
+    try:
+        table_id = int(table_id_str)
+    except ValueError:
+        return _html_response("Invalid Table ID", "table_id must be a number.", status="error"), 400
+
+    if table_id not in TABLE_MAP:
+        return _html_response("Unsupported Table", f"Table {table_id} is not configured.", status="error"), 400
+
+    fm = TABLE_MAP[table_id]
+    if not fm.ready_to_sync:
+        return _html_response(
+            "Bulk Sync Not Configured",
+            f"Table {table_id} does not have a 'Ready to Sync' checkbox field configured.",
+            status="error",
+        ), 400
+
+    if _baserow is None:
+        _init_clients()
+
+    # Find rows where the checkbox is true
+    # Baserow API uses filter__field_XXXX__boolean=true
+    filter_key = f"filter__{fm.ready_to_sync}__boolean"
+    filters = {filter_key: "true"}
+
+    try:
+        rows = list(_baserow.list_table_rows(table_id, filters=filters))
+    except Exception as exc:
+        return _html_response("Baserow Error", f"Failed to fetch rows: {exc}", status="error"), 500
+
+    if not rows:
+        return _html_response(
+            "No Products Selected",
+            "No rows are checked in the 'Ready to Sync' column.",
+            status="info",
+        ), 200
+
+    results_html = []
+    success_count = 0
+    fail_count = 0
+
+    for row in rows:
+        rid = int(row["id"])
+        # Run sync for this row
+        html_segment, status_code = _sync_product(rid, table_id)
+        if status_code == 200:
+            success_count += 1
+            # Uncheck the box in Baserow on success
+            try:
+                _baserow.update_row(table_id, rid, {fm.ready_to_sync: False})
+            except Exception:
+                pass
+        else:
+            fail_count += 1
+        
+        # We extract just the body content from the returned HTML to compose a summary
+        # Simple string manipulation to pull out the card
+        if '<div class="card">' in html_segment:
+            card_html = html_segment.split('<div class="card">')[1].split('</div>\n</body>')[0]
+            results_html.append(f"<div class='card' style='margin-bottom: 20px; box-shadow: none;'>{card_html}</div>")
+        else:
+            results_html.append(f"<div class='card' style='margin-bottom: 20px; box-shadow: none;'>Failed to parse result for row {rid}</div>")
+
+    # Wrap the multiple results in our standard HTML
+    summary_msg = f"Processed {len(rows)} products: {success_count} succeeded, {fail_count} failed."
+    summary_status = "success" if fail_count == 0 else ("error" if success_count == 0 else "processing")
+    
+    # We cheat a bit by replacing the details section with our concatenated cards
+    all_cards = "\n".join(results_html)
+    
+    return _html_response(
+        "Bulk Sync Complete",
+        summary_msg,
+        status=summary_status,
+        details=all_cards
+    ), 200
+
+
 # Direct endpoint — for manual/future use
 # URL pattern: /webhook/send-to-shopify?table_id=742&row_id=XXX
 @app.route("/webhook/send-to-shopify", methods=["GET", "POST"])
@@ -463,6 +548,45 @@ def health():
 
 
 # ---------------------------------------------------------------------------
+# Background Poller (Auto-Sync Checked Rows)
+# ---------------------------------------------------------------------------
+def _auto_sync_poller():
+    """Background thread that checks for checked rows and syncs them automatically."""
+    print("  [Auto-Sync] Background poller started (checking every 10s)...")
+    while True:
+        time.sleep(10)
+        if _baserow is None:
+            continue
+            
+        for table_id, fm in TABLE_MAP.items():
+            if not fm.ready_to_sync:
+                continue
+                
+            filter_key = f"filter__{fm.ready_to_sync}__boolean"
+            filters = {filter_key: "true"}
+            
+            try:
+                rows = list(_baserow.list_table_rows(table_id, filters=filters))
+                for row in rows:
+                    rid = int(row["id"])
+                    print(f"  [Auto-Sync] Detected checked row {rid} in Table {table_id}. Syncing...")
+                    # Uncheck it first to prevent double processing if sync takes long
+                    try:
+                        _baserow.update_row(table_id, rid, {fm.ready_to_sync: False})
+                    except Exception as e:
+                        print(f"  [Auto-Sync] Failed to uncheck row {rid}: {e}")
+                        
+                    html_segment, status_code = _sync_product(rid, table_id)
+                    if status_code == 200:
+                        print(f"  [Auto-Sync] Successfully synced row {rid}.")
+                    else:
+                        print(f"  [Auto-Sync] Failed to sync row {rid} (HTTP {status_code}).")
+            except Exception as e:
+                # Silently ignore connection errors during polling
+                pass
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main() -> int:
@@ -473,7 +597,7 @@ def main() -> int:
     args = parser.parse_args()
 
     print("=" * 60)
-    print("  Send to Shopify — Webhook Server")
+    print("  Send to Shopify — Webhook Server & Auto-Sync")
     print("=" * 60)
     print(f"  Host: {args.host}")
     print(f"  Port: {args.port}")
@@ -481,6 +605,9 @@ def main() -> int:
     print()
     print("  Professional Baserow Formula:")
     print(f"    button(concat('http://localhost:{args.port}/sync?row_id=', totext(row_id())), 'Send to Shopify')")
+    print()
+    print("  Auto-Sync:")
+    print("    Simply check the 'Ready to Sync' box in Baserow and it will sync automatically!")
     print("=" * 60)
 
     # Pre-initialize clients
@@ -488,12 +615,19 @@ def main() -> int:
         _init_clients()
         print(f"\n  Baserow: {_settings.baserow_url}")
         print(f"  Shopify: {_shopify.config.shop_host}")
-        print(f"\n  Server ready! Waiting for button clicks...\n")
+        print(f"\n  Server ready! Waiting for button clicks or checkbox ticks...\n")
+        
+        # Start background poller
+        t = threading.Thread(target=_auto_sync_poller, daemon=True)
+        t.start()
+        
     except Exception as exc:
         print(f"\n  WARNING: Client init failed: {exc}")
         print("  Clients will be initialized on first request.\n")
 
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    # Run flask
+    # use_reloader=False prevents the poller thread from running twice in debug mode
+    app.run(host=args.host, port=args.port, debug=args.debug, use_reloader=False)
     return 0
 
 

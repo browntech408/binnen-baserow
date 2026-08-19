@@ -107,55 +107,55 @@ def load_settings() -> Settings:
         baserow_url=url,
         baserow_token=token,
         brands_table_id=int(table_id),
-        products_table_id=int(os.getenv("PRODUCTS_TABLE_ID", "802")),
-        category_table_id=int(os.getenv("CATEGORY_TABLE_ID", "806")),
-        subcategory_table_id=int(os.getenv("SUBCATEGORY_TABLE_ID", "807")),
-        field_brand_name=os.getenv("FIELD_BRAND_NAME", "field_8323").strip(),
-        field_domain=os.getenv("FIELD_DOMAIN", "field_8324").strip(),
+        products_table_id=int(os.getenv("PRODUCTS_TABLE_ID", "742")),
+        category_table_id=int(os.getenv("CATEGORY_TABLE_ID", "746")),
+        subcategory_table_id=int(os.getenv("SUBCATEGORY_TABLE_ID", "747")),
+        field_brand_name=os.getenv("FIELD_BRAND_NAME", "field_7446").strip(),
+        field_domain=os.getenv("FIELD_DOMAIN", "field_7447").strip(),
         field_website_url=os.getenv("FIELD_WEBSITE_URL", "").strip(),
-        field_brand_quote=os.getenv("FIELD_BRAND_QUOTE", "field_8325").strip(),
-        field_products=os.getenv("FIELD_PRODUCTS", "field_8326").strip(),
-        field_bg_remove=os.getenv("FIELD_BG_REMOVE", "field_8328").strip(),
-        field_product_name=os.getenv("FIELD_PRODUCT_NAME", "field_8224").strip(),
+        field_brand_quote=os.getenv("FIELD_BRAND_QUOTE", "field_7448").strip(),
+        field_products=os.getenv("FIELD_PRODUCTS", "field_7449").strip(),
+        field_bg_remove=os.getenv("FIELD_BG_REMOVE", "field_7451").strip(),
+        field_product_name=os.getenv("FIELD_PRODUCT_NAME", "field_7347").strip(),
         field_product_description=os.getenv(
-            "FIELD_PRODUCT_DESCRIPTION", "field_8225"
+            "FIELD_PRODUCT_DESCRIPTION", "field_7348"
         ).strip(),
-        field_product_url=os.getenv("FIELD_PRODUCT_URL", "field_8229").strip(),
-        field_product_status=os.getenv("FIELD_PRODUCT_STATUS", "field_8230").strip(),
-        field_designer=os.getenv("FIELD_DESIGNER", "field_8233").strip(),
+        field_product_url=os.getenv("FIELD_PRODUCT_URL", "field_7352").strip(),
+        field_product_status=os.getenv("FIELD_PRODUCT_STATUS", "field_7353").strip(),
+        field_designer=os.getenv("FIELD_DESIGNER", "field_7356").strip(),
         field_designer_description=os.getenv(
-            "FIELD_DESIGNER_DESCRIPTION", "field_8234"
+            "FIELD_DESIGNER_DESCRIPTION", "field_7357"
         ).strip(),
         field_designer_image=os.getenv(
-            "FIELD_DESIGNER_IMAGE", "field_8232"
+            "FIELD_DESIGNER_IMAGE", "field_7355"
         ).strip(),
         field_source_category=os.getenv(
-            "FIELD_SOURCE_CATEGORY", "field_8245"
+            "FIELD_SOURCE_CATEGORY", "field_7368"
         ).strip(),
         field_source_subcategory=os.getenv(
-            "FIELD_SOURCE_SUBCATEGORY", "field_8246"
+            "FIELD_SOURCE_SUBCATEGORY", "field_7369"
         ).strip(),
-        field_price=os.getenv("FIELD_PRICE", "field_8248").strip(),
+        field_price=os.getenv("FIELD_PRICE", "field_7371").strip(),
         field_product_category=os.getenv(
-            "FIELD_PRODUCT_CATEGORY", "field_8240"
+            "FIELD_PRODUCT_CATEGORY", "field_7363"
         ).strip(),
-        field_sub_category=os.getenv("FIELD_SUB_CATEGORY", "field_8241").strip(),
-        field_brand_link=os.getenv("FIELD_BRAND_LINK", "field_8253").strip(),
-        field_product_images=os.getenv("FIELD_PRODUCT_IMAGES", "field_8226").strip(),
-        field_hero_images=os.getenv("FIELD_HERO_IMAGES", "field_8235").strip(),
+        field_sub_category=os.getenv("FIELD_SUB_CATEGORY", "field_7364").strip(),
+        field_brand_link=os.getenv("FIELD_BRAND_LINK", "field_7376").strip(),
+        field_product_images=os.getenv("FIELD_PRODUCT_IMAGES", "field_7349").strip(),
+        field_hero_images=os.getenv("FIELD_HERO_IMAGES", "field_7358").strip(),
         field_lifestyle_images=os.getenv(
-            "FIELD_LIFESTYLE_IMAGES", "field_8236"
+            "FIELD_LIFESTYLE_IMAGES", "field_7359"
         ).strip(),
-        field_detail_image=os.getenv("FIELD_DETAIL_IMAGE", "field_8237").strip(),
+        field_detail_image=os.getenv("FIELD_DETAIL_IMAGE", "field_7360").strip(),
         upload_product_images=_env_bool("UPLOAD_PRODUCT_IMAGES", True),
         max_product_images_upload=int(os.getenv("MAX_PRODUCT_IMAGES_UPLOAD", "0")),
         max_lifestyle_images_upload=int(os.getenv("MAX_LIFESTYLE_IMAGES_UPLOAD", "0")),
-        field_category_name=os.getenv("FIELD_CATEGORY_NAME", "field_8329").strip(),
+        field_category_name=os.getenv("FIELD_CATEGORY_NAME", "field_7452").strip(),
         field_subcategory_name=os.getenv(
-            "FIELD_SUBCATEGORY_NAME", "field_8333"
+            "FIELD_SUBCATEGORY_NAME", "field_7456"
         ).strip(),
         field_subcategory_parent=os.getenv(
-            "FIELD_SUBCATEGORY_PARENT", "field_8334"
+            "FIELD_SUBCATEGORY_PARENT", "field_7457"
         ).strip(),
         field_scrape_status=os.getenv("FIELD_SCRAPE_STATUS", "").strip(),
         field_scrape_error=os.getenv("FIELD_SCRAPE_ERROR", "").strip(),
@@ -178,10 +178,10 @@ def load_settings() -> Settings:
         ).strip(),
         ai_product_descriptions=_env_bool("AI_PRODUCT_DESCRIPTIONS", False),
         field_ai_description_nl=os.getenv(
-            "FIELD_AI_DESCRIPTION_NL", "field_8239"
+            "FIELD_AI_DESCRIPTION_NL", "field_7362"
         ).strip(),
         field_accordion_product_description=os.getenv(
-            "FIELD_ACCORDION_PRODUCT_DESCRIPTION", "field_8287"
+            "FIELD_ACCORDION_PRODUCT_DESCRIPTION", "field_7410"
         ).strip(),
         shopify_metafield_namespace=os.getenv(
             "SHOPIFY_METAFIELD_NAMESPACE", "custom"

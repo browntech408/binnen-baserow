@@ -1,5 +1,5 @@
 """
-Create or update scraped products in Baserow productsDetails table (802).
+Create or update scraped products in Baserow productsDetails table (742).
 """
 from __future__ import annotations
 
@@ -391,8 +391,8 @@ def validate_products_table(client: BaserowClient, settings: Settings) -> None:
     if "product_name" not in names:
         raise ValueError(
             f"Table {settings.products_table_id} is not productsDetails "
-            f"(columns: {sorted(names)}). Set PRODUCTS_TABLE_ID=802 in .env. "
-            f"Table 806 is productCategory (Name/subCategory only)."
+            f"(columns: {sorted(names)}). Set PRODUCTS_TABLE_ID=742 in .env. "
+            f"Table 746 is productCategory (Name/subCategory only)."
         )
 
 

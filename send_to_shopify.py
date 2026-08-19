@@ -64,6 +64,7 @@ class TableFieldMap:
     woonbloq_product_id: str
     woonbloq_status: str
     shopify_stores: str         # link_row (table 742 only, field_8509)
+    ready_to_sync: str
 
 
 TABLE_742 = TableFieldMap(
@@ -88,6 +89,7 @@ TABLE_742 = TableFieldMap(
     woonbloq_product_id="field_7425",
     woonbloq_status="field_7427",
     shopify_stores="field_8509",
+    ready_to_sync="field_8511",
 )
 
 TABLE_802 = TableFieldMap(
@@ -112,6 +114,7 @@ TABLE_802 = TableFieldMap(
     woonbloq_product_id="field_8302",
     woonbloq_status="field_8304",
     shopify_stores="",          # table 802 doesn't have this extra field
+    ready_to_sync="field_8515",
 )
 
 TABLE_MAP: dict[int, TableFieldMap] = {

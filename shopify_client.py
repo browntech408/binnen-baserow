@@ -200,17 +200,44 @@ class ShopifyClient:
         return products
 
     def set_product_status(self, product_id: int, status: str) -> dict[str, Any]:
+        status_clean = str(status).strip().lower()
         resp = self._request(
             "PUT",
             f"/products/{product_id}.json",
-            json_body={"product": {"id": product_id, "status": status}},
+            json_body={"product": {"id": product_id, "status": status_clean}},
         )
-        if resp.status_code >= 400:
+        if resp.status_code < 400:
+            return resp.json().get("product") or {}
+
+        # Fallback to GraphQL productUpdate (handles UNLISTED, DRAFT, ACTIVE)
+        try:
+            gql_status = status_clean.upper()
+            mutation = """
+            mutation productUpdate($input: ProductInput!) {
+                productUpdate(input: $input) {
+                    product {
+                        id
+                        status
+                    }
+                    userErrors {
+                        field
+                        message
+                    }
+                }
+            }
+            """
+            gid = f"gid://shopify/Product/{product_id}"
+            data = self.graphql(mutation, {"input": {"id": gid, "status": gql_status}})
+            res = (data.get("data") or {}).get("productUpdate") or {}
+            errors = res.get("userErrors") or []
+            if errors:
+                raise RuntimeError(f"GraphQL userErrors: {errors}")
+            return res.get("product") or {}
+        except Exception:
             raise RuntimeError(
                 f"Update product {product_id} failed ({resp.status_code}): "
                 f"{resp.text[:500]}"
             )
-        return resp.json().get("product") or {}
 
     def get_product(self, product_id: int) -> dict[str, Any]:
         resp = self._request("GET", f"/products/{product_id}.json")
