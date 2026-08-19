@@ -234,6 +234,15 @@ def _build_shopify_metafields(
     add(settings.shopify_metafield_sub_category, subcategory, "single_line_text_field")
     add(settings.shopify_metafield_designer, designer, "single_line_text_field")
     add(settings.shopify_metafield_designer_image, designer_image_url, "url")
+    
+    score_raw = row.get("field_7394") or row.get("Score")
+    if score_raw is not None and str(score_raw).strip() != "":
+        try:
+            score_val = str(int(float(score_raw)))
+            add("score", score_val, "number_integer")
+        except (ValueError, TypeError):
+            pass
+
     return out
 
 
@@ -658,21 +667,39 @@ def main() -> int:
             print(f"  ERROR building job: {exc}")
             continue
 
-        img_n = len(job.product_payload.get("images") or [])
-        if job.images_skipped:
-            print(f"  images: {img_n} uploaded, {len(job.images_skipped)} skipped")
+        existing_gid = str(row.get(target.product_id_field) or "").strip()
         try:
-            created = shopify.create_product(job.product_payload)
-            pid = int(created["id"])
-            job.shopify_product_id = pid
-            baserow.update_row(
-                settings.products_table_id,
-                job.baserow_row_id,
-                {
-                    target.product_id_field: f"gid://shopify/Product/{pid}",
-                    target.status_field: "Added" if job.shopify_status == "active" else "Draft",
-                },
-            )
+            if existing_gid and existing_gid.startswith("gid://shopify/Product/"):
+                pid = int(existing_gid.split("/")[-1])
+                job.shopify_product_id = pid
+                print(f"  -> Existing Shopify Product #{pid} found. Updating fields (keeping existing images)...")
+                
+                update_payload: dict[str, Any] = {
+                    "title": job.product_payload.get("title"),
+                    "body_html": job.product_payload.get("body_html"),
+                    "vendor": job.product_payload.get("vendor"),
+                    "product_type": job.product_payload.get("product_type"),
+                    "status": job.product_payload.get("status"),
+                }
+                if job.product_payload.get("variants"):
+                    update_payload["variants"] = job.product_payload.get("variants")
+                
+                created = shopify.update_product(pid, update_payload)
+            else:
+                img_n = len(job.product_payload.get("images") or [])
+                if job.images_skipped:
+                    print(f"  images: {img_n} uploaded, {len(job.images_skipped)} skipped")
+                created = shopify.create_product(job.product_payload)
+                pid = int(created["id"])
+                job.shopify_product_id = pid
+                baserow.update_row(
+                    settings.products_table_id,
+                    job.baserow_row_id,
+                    {
+                        target.product_id_field: f"gid://shopify/Product/{pid}",
+                        target.status_field: "Added" if job.shopify_status == "active" else "Draft",
+                    },
+                )
             ok += 1
             print(f"  -> Shopify id {pid} ({job.shopify_status})")
 
