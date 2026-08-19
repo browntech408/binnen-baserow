@@ -124,6 +124,42 @@ def get_baserow_product(row_id: int, table_id: int | None = None) -> str:
         return f"Error fetching Baserow row {row_id}: {e}"
 
 
+BASEROW_FIELD_MAP = {
+    "product_name": "field_7347",
+    "name": "field_7347",
+    "title": "field_7347",
+    "product_description": "field_7348",
+    "description": "field_7348",
+    "product_images": "field_7349",
+    "images": "field_7349",
+    "product_url": "field_7352",
+    "url": "field_7352",
+    "status": "field_7353",
+    "designer": "field_7356",
+    "hero_images": "field_7358",
+    "lifestyle_images": "field_7359",
+    "detail_image": "field_7360",
+    "ai_description_translated_nl": "field_7362",
+    "ai_description": "field_7362",
+    "nl_description": "field_7362",
+    "product_category": "field_7363",
+    "category": "field_7363",
+    "sub_category": "field_7364",
+    "subcategory": "field_7364",
+    "price": "field_7371",
+    "brand_table": "field_7376",
+    "brand": "field_7376",
+    "score": "field_7394",
+    "rating": "field_7394",
+    "bg_removed_hero": "field_7400",
+    "woonbloqproductid": "field_7425",
+    "woonbloq_id": "field_7425",
+    "shopify_id": "field_7425",
+    "woonbloqstatus": "field_7427",
+    "ready_to_sync": "field_8511",
+}
+
+
 @mcp.tool()
 def update_baserow_product(row_id: int, fields: dict, confirm: bool = False, table_id: int | None = None) -> str:
     """Update field values in a Baserow product row.
@@ -142,7 +178,18 @@ def update_baserow_product(row_id: int, fields: dict, confirm: bool = False, tab
     try:
         settings, client = get_baserow()
         target_table = table_id or settings.products_table_id
-        updated = client.update_row(target_table, row_id, fields)
+        
+        mapped_fields = {}
+        for k, v in fields.items():
+            norm_k = str(k).lower().strip().replace(" ", "_")
+            if norm_k in BASEROW_FIELD_MAP:
+                mapped_fields[BASEROW_FIELD_MAP[norm_k]] = str(v) if norm_k in ("score", "rating") else v
+            elif str(k).startswith("field_"):
+                mapped_fields[k] = str(v) if k == "field_7394" else v
+            else:
+                mapped_fields[k] = str(v) if norm_k in ("score", "rating") else v
+                
+        updated = client.update_row(target_table, row_id, mapped_fields)
         return json.dumps({"message": "Baserow row updated successfully", "row": updated}, indent=2)
     except Exception as e:
         return f"Error updating Baserow row {row_id}: {e}"

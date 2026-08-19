@@ -721,13 +721,13 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             raw_fields = args.get("fields", {})
             mapped_fields = {}
             for k, v in raw_fields.items():
-                norm_k = k.lower().strip().replace(" ", "_")
+                norm_k = str(k).lower().strip().replace(" ", "_")
                 if norm_k in BASEROW_FIELD_MAP:
-                    mapped_fields[BASEROW_FIELD_MAP[norm_k]] = v
-                elif k.startswith("field_"):
-                    mapped_fields[k] = v
+                    mapped_fields[BASEROW_FIELD_MAP[norm_k]] = str(v) if norm_k in ("score", "rating") else v
+                elif str(k).startswith("field_"):
+                    mapped_fields[k] = str(v) if k == "field_7394" else v
                 else:
-                    mapped_fields[k] = v
+                    mapped_fields[k] = str(v) if norm_k in ("score", "rating") else v
 
             # Fetch old row values
             old_vals = {}
