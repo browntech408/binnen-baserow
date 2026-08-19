@@ -1,6 +1,6 @@
-"""Continuous Sync Daemon for Binnen OS.
+"""Continuous Score Auto-Sync Daemon for Binnen OS.
 
-Runs Baserow -> Shopify product & score sync automatically every 10 seconds in the background with live streaming logs.
+Only runs Score Auto-Sync from Baserow -> Shopify every 10 seconds.
 """
 import sys
 import time
@@ -11,49 +11,33 @@ from datetime import datetime
 INTERVAL_SECONDS = 10
 BASE_DIR = Path(__file__).parent.resolve()
 
-def run_sync_once():
-    """Run one pass of baserow_shopify_sync.py and update_score_baserow_to_shopify.py with unbuffered live logs."""
+def run_score_sync_once():
+    """Run one pass of update_score_baserow_to_shopify.py --all."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     python_bin = sys.executable
 
-    # 1. Main Product & Metafield Sync (Live Streaming Logs)
-    print(f"\n[{timestamp}] === Starting Baserow -> Shopify Product Sync ===", flush=True)
-    cmd_products = [python_bin, "-u", str(BASE_DIR / "baserow_shopify_sync.py"), "--apply"]
-    try:
-        res1 = subprocess.run(cmd_products, cwd=str(BASE_DIR), timeout=300)
-        if res1.returncode == 0:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Product sync finished.", flush=True)
-        else:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Product sync exited with code {res1.returncode}.", flush=True)
-    except Exception as exc:
-        print(f"[{timestamp}] Product sync error: {exc}", flush=True)
-
-    # 2. Standalone Score Metafield Sync (Live Streaming Logs)
-    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] === Starting Baserow -> Shopify Score Sync ===", flush=True)
+    print(f"[{timestamp}] === Starting Baserow -> Shopify Score Auto-Sync ===", flush=True)
     cmd_scores = [python_bin, "-u", str(BASE_DIR / "update_score_baserow_to_shopify.py"), "--all"]
     try:
-        res2 = subprocess.run(cmd_scores, cwd=str(BASE_DIR), timeout=300)
-        if res2.returncode == 0:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Score sync finished.", flush=True)
-        else:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Score sync exited with code {res2.returncode}.", flush=True)
+        res = subprocess.run(cmd_scores, cwd=str(BASE_DIR), timeout=120)
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Score sync pass completed (Exit Code: {res.returncode}).", flush=True)
     except Exception as exc:
         print(f"[{timestamp}] Score sync error: {exc}", flush=True)
 
 def main():
-    print(f"=== Binnen Continuous Sync Daemon Started (Interval: {INTERVAL_SECONDS}s) ===", flush=True)
+    print(f"=== Binnen Score Auto-Sync Daemon Active (Interval: {INTERVAL_SECONDS}s) ===", flush=True)
     while True:
         try:
-            run_sync_once()
+            run_score_sync_once()
         except Exception as exc:
-            print(f"Daemon iteration error: {exc}", flush=True)
+            print(f"Daemon error: {exc}", flush=True)
         
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Waiting {INTERVAL_SECONDS} seconds before next sync...\n", flush=True)
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Waiting {INTERVAL_SECONDS} seconds before next score sync...\n", flush=True)
         time.sleep(INTERVAL_SECONDS)
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\nSync Daemon stopped by user.", flush=True)
+        print("\nScore Sync Daemon stopped.", flush=True)
         sys.exit(0)
