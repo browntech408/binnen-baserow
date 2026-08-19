@@ -4,13 +4,16 @@ from __future__ import annotations
 import os
 import re
 import math
+import hmac
+import hashlib
+import time
 from pathlib import Path
 from typing import Any
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from pydantic import BaseModel
 
 from baserow_client import BaserowClient
@@ -30,6 +33,106 @@ app.add_middleware(
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# ==============================================================================
+# AUTHENTICATION CONFIGURATION & SESSION SECURITY
+# ==============================================================================
+ADMIN_EMAIL = os.getenv("DASHBOARD_ADMIN_EMAIL", "admin@admin.com").strip()
+ADMIN_PASSWORD = os.getenv("DASHBOARD_ADMIN_PASSWORD", "Test12345").strip()
+SECRET_KEY = os.getenv("DASHBOARD_SECRET_KEY", "binnen-catalog-os-secret-key-778899").encode("utf-8")
+SESSION_COOKIE_NAME = "binnen_session"
+
+
+def create_session_token(email: str) -> str:
+    """Generate signed HMAC session token."""
+    ts = str(int(time.time()))
+    payload = f"{email}:{ts}".encode("utf-8")
+    sig = hmac.new(SECRET_KEY, payload, hashlib.sha256).hexdigest()
+    return f"{email}:{ts}:{sig}"
+
+
+def verify_session_token(token: str | None) -> bool:
+    """Verify validity, timestamp, and HMAC signature of the session cookie."""
+    if not token:
+        return False
+    try:
+        parts = token.split(":")
+        if len(parts) != 3:
+            return False
+        email, ts_str, sig = parts
+        if email.lower() != ADMIN_EMAIL.lower():
+            return False
+        ts = int(ts_str)
+        # 7 Days expiration
+        if time.time() - ts > 7 * 24 * 3600:
+            return False
+        payload = f"{email}:{ts_str}".encode("utf-8")
+        expected_sig = hmac.new(SECRET_KEY, payload, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected_sig)
+    except Exception:
+        return False
+
+
+def require_auth(request: Request):
+    """Dependency to guard API routes from unauthorized access."""
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token and "authorization" in request.headers:
+        auth_header = request.headers["authorization"]
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not verify_session_token(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please login.",
+        )
+    return ADMIN_EMAIL
+
+
+# ==============================================================================
+# GLOBAL AUTHENTICATION MIDDLEWARE (Strict Zero-Access Guard)
+# ==============================================================================
+@app.middleware("http")
+async def enforce_auth_middleware(request: Request, call_next):
+    """Ensure NO unauthenticated user can access the dashboard or APIs."""
+    path = request.url.path
+
+    # Public white-listed endpoints
+    public_exact_paths = {"/login", "/api/auth/login", "/api/auth/status", "/logout"}
+    if path in public_exact_paths:
+        return await call_next(request)
+
+    # Static assets needed by login page (CSS, SVG, images) - but block direct access to index.html
+    if path.startswith("/static/"):
+        if path.endswith("index.html"):
+            token = request.cookies.get(SESSION_COOKIE_NAME)
+            if not verify_session_token(token):
+                return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+        return await call_next(request)
+
+    # All other routes require valid session token
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token and "authorization" in request.headers:
+        auth_header = request.headers["authorization"]
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+
+    if not verify_session_token(token):
+        if path.startswith("/api/"):
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"ok": False, "detail": "Authentication required. Please login."},
+            )
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+
+    return await call_next(request)
+
+
+# ==============================================================================
+# REQUEST MODELS
+# ==============================================================================
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
 
 class ChatRequest(BaseModel):
@@ -51,12 +154,74 @@ class GenerateAIDescRequest(BaseModel):
     row_id: int
 
 
+# ==============================================================================
+# AUTH & PAGE SERVING ROUTES
+# ==============================================================================
 @app.get("/")
-async def serve_index():
+async def serve_index(request: Request):
+    """Serve main catalog dashboard if authenticated, else redirect to login."""
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not verify_session_token(token):
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
     return FileResponse(STATIC_DIR / "index.html")
 
 
-@app.get("/api/stats")
+@app.get("/login")
+async def serve_login(request: Request):
+    """Serve login page if unauthenticated, else redirect to dashboard."""
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if verify_session_token(token):
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.post("/api/auth/login")
+async def handle_login(req: LoginRequest, response: Response):
+    """Authenticate administrator and set HttpOnly secure session cookie."""
+    if req.email.strip().lower() == ADMIN_EMAIL.lower() and req.password == ADMIN_PASSWORD:
+        token = create_session_token(ADMIN_EMAIL)
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=token,
+            httponly=True,
+            samesite="lax",
+            max_age=7 * 24 * 3600,
+            path="/",
+        )
+        return {"ok": True, "redirect": "/", "user": ADMIN_EMAIL}
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid email or password. Please check your credentials.",
+    )
+
+
+@app.post("/api/auth/logout")
+async def handle_logout(response: Response):
+    """Clear session cookie and log out."""
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    return {"ok": True, "redirect": "/login"}
+
+
+@app.get("/logout")
+async def handle_logout_get():
+    """Direct URL logout redirect."""
+    resp = RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+    resp.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    return resp
+
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request):
+    """Check current authentication status."""
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    is_authed = verify_session_token(token)
+    return {"authenticated": is_authed, "user": ADMIN_EMAIL if is_authed else None}
+
+
+# ==============================================================================
+# PROTECTED API ENDPOINTS
+# ==============================================================================
+@app.get("/api/stats", dependencies=[Depends(require_auth)])
 async def get_dashboard_stats():
     """Fetch live counts, Shopify catalog stats, and sync health."""
     try:
@@ -125,13 +290,13 @@ async def get_dashboard_stats():
                 "categories": settings.category_table_id,
                 "subcategories": settings.subcategory_table_id,
             },
-            "agent_status": "Active (Claude 3.5 Sonnet)",
+            "agent_status": "Active (Binnen Copilot)",
         }
     except Exception as e:
         return {"error": str(e), "baserow_products": 0, "baserow_brands": 0, "shopify": {}}
 
 
-@app.get("/api/brands")
+@app.get("/api/brands", dependencies=[Depends(require_auth)])
 async def get_brands_list():
     """Fetch all active brands from Table 745 for filter dropdowns."""
     try:
@@ -148,7 +313,7 @@ async def get_brands_list():
         return {"brands": [], "error": str(e)}
 
 
-@app.get("/api/baserow/products")
+@app.get("/api/baserow/products", dependencies=[Depends(require_auth)])
 async def get_baserow_products(
     search: str = "",
     brand_id: int | None = None,
@@ -214,7 +379,7 @@ async def get_baserow_products(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/product/{row_id}")
+@app.get("/api/product/{row_id}", dependencies=[Depends(require_auth)])
 async def get_single_product(row_id: int):
     """Get complete row detail from Table 742."""
     try:
@@ -226,7 +391,7 @@ async def get_single_product(row_id: int):
         raise HTTPException(status_code=404, detail=f"Product row not found: {e}")
 
 
-@app.post("/api/sync/product")
+@app.post("/api/sync/product", dependencies=[Depends(require_auth)])
 async def sync_single_product(req: SyncProductRequest):
     """Trigger Shopify sync for a single Baserow row."""
     try:
@@ -249,7 +414,6 @@ async def sync_single_product(req: SyncProductRequest):
         else:
             _create_product(row, TABLE_742, data, shopify=shopify, baserow=baserow, dry_run=req.dry_run)
             action = "created"
-            # Refresh row to get assigned ID
             fresh_row = baserow.get_row(TABLE_742.table_id, req.row_id)
             shopify_id = fresh_row.get(TABLE_742.woonbloq_product_id) or "Assigned"
 
@@ -264,7 +428,7 @@ async def sync_single_product(req: SyncProductRequest):
         raise HTTPException(status_code=500, detail=f"Shopify Sync failed: {e}")
 
 
-@app.post("/api/chat")
+@app.post("/api/chat", dependencies=[Depends(require_auth)])
 async def handle_chat(req: ChatRequest):
     """Run interactive Claude / OpenRouter agent loop with Baserow and Shopify tools."""
     try:
@@ -274,7 +438,7 @@ async def handle_chat(req: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/action/confirm")
+@app.post("/api/action/confirm", dependencies=[Depends(require_auth)])
 async def handle_confirm_action(req: ConfirmActionRequest):
     """Directly execute confirmed write tool action."""
     try:
@@ -286,7 +450,7 @@ async def handle_confirm_action(req: ConfirmActionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Mount static directory
+# Mount static directory (CSS, JS, images)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 if __name__ == "__main__":

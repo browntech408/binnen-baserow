@@ -3,6 +3,19 @@
  * Fixed-Viewport Architecture, Independent Copilot Streams, & Full MCP Tooling
  */
 
+// Global 401 Auth Interceptor
+const _nativeFetch = window.fetch;
+window.fetch = async function (...args) {
+  const resp = await _nativeFetch(...args);
+  if (resp.status === 401) {
+    const url = typeof args[0] === "string" ? args[0] : (args[0] && args[0].url) || "";
+    if (!url.includes("/api/auth/login") && !url.includes("/api/auth/status")) {
+      window.location.replace("/login");
+    }
+  }
+  return resp;
+};
+
 const state = {
   products: [],
   brands: [],
@@ -18,7 +31,34 @@ const state = {
   chatMessages: [
     {
       role: "assistant",
-      content: "**Welcome to Binnen Catalog OS.**\n\nI am your Autonomous Multi-Storefront AI Copilot connected live to **Baserow** and **Shopify Woonbloq Store**.\n\nHere are some queries you can ask me:\n- *'How many total products are in our Shopify store?'*\n- *'How many products on Shopify have 0 stock or no inventory value entered?'*\n- *'How many products in Baserow are missing price or Dutch descriptions?'*\n- *'How many products in Baserow have empty price field?'*\n- *'Filter Shopify products by vendor Spectrum and check stock status'*",
+      content: `### Welcome to Binnen Catalog Intelligence
+
+I am your **Autonomous Multi-Storefront AI Copilot**, connected live to **Baserow Master Catalog** and **Shopify Woonbloq Storefront**.
+
+Select an executive query below or type your own question:
+
+<div class="welcome-prompts-grid">
+  <button class="welcome-prompt-btn" onclick="usePrompt('How many total products are in our Shopify store and what is the breakdown by active, draft, and archived?')">
+    <span class="prompt-icon-svg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+    <span><strong>Shopify Products &amp; Status</strong> — Total counts &amp; publication state</span>
+  </button>
+  <button class="welcome-prompt-btn" onclick="usePrompt('Filter Shopify products by vendor Spectrum Design and check stock status')">
+    <span class="prompt-icon-svg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
+    <span><strong>Spectrum Design Stock Audit</strong> — 32 live items, pricing &amp; inventory state</span>
+  </button>
+  <button class="welcome-prompt-btn" onclick="usePrompt('How many products on Shopify have 0 stock or no inventory value entered?')">
+    <span class="prompt-icon-svg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <span><strong>Zero &amp; Untracked Stock Audit</strong> — Inventory health check</span>
+  </button>
+  <button class="welcome-prompt-btn" onclick="usePrompt('How many products in Baserow have empty price field?')">
+    <span class="prompt-icon-svg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+    <span><strong>Baserow Missing Prices</strong> — Catalog pricing gap analysis</span>
+  </button>
+  <button class="welcome-prompt-btn" onclick="usePrompt('Show me the overall sync coverage between Baserow and Shopify')">
+    <span class="prompt-icon-svg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg></span>
+    <span><strong>Catalog Sync Health</strong> — Master vs storefront link coverage</span>
+  </button>
+</div>`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ],
@@ -387,7 +427,7 @@ async function fetchBrands() {
     const data = await res.json();
     state.brands = data.brands || [];
 
-    DOM.brandSelect.innerHTML = `<option value="">🏢 Filter by Brand (All ${state.brands.length})</option>`;
+    DOM.brandSelect.innerHTML = `<option value="">Filter by Brand (All ${state.brands.length})</option>`;
     state.brands.forEach((b) => {
       const opt = document.createElement("option");
       opt.value = b.id;
@@ -469,7 +509,7 @@ async function fetchProducts() {
     DOM.productsTableBody.innerHTML = `
       <tr>
         <td colspan="5" style="text-align: center; color: var(--rose-400); padding: 40px;">
-          ⚠️ Unable to load products from Baserow. Please check your connection and try again.
+          Unable to load products from Baserow. Please check your connection and try again.
         </td>
       </tr>
     `;
@@ -696,7 +736,7 @@ async function syncProductAction(rowId) {
     });
     const data = await res.json();
     if (res.ok && data.ok) {
-      showToast(`✓ Successfully ${data.action} product "${data.product_title}" on Shopify!`, "success");
+      showToast(`Successfully ${data.action} product "${data.product_title}" on Shopify!`, "success");
       await Promise.all([fetchStats(), fetchProducts()]);
       if (state.selectedProduct && state.selectedProduct.id === rowId) {
         openProductDrawer(rowId);
@@ -763,14 +803,14 @@ async function sendMessage() {
     } else {
       state.chatMessages.push({
         role: "assistant",
-        content: `⚠️ **Agent Error:** ${data.detail || "Unknown error occurred"}`,
+        content: `**[Agent Notice]** ${data.detail || "Unknown error occurred"}`,
         time: replyTime,
       });
     }
   } catch (err) {
     state.chatMessages.push({
       role: "assistant",
-      content: `⚠️ **Network Error:** ${err.message}`,
+      content: `**[Network Error]** ${err.message}`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     });
   } finally {
@@ -791,7 +831,7 @@ async function executeConfirmedAction(actionData) {
     const result = await res.json();
     state.chatMessages.push({
       role: "assistant",
-      content: `✓ **Action Confirmed & Executed:**\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``,
+      content: `**[Action Confirmed & Executed]**\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     });
     renderChat();
@@ -851,22 +891,66 @@ function renderChat() {
   DOM.chatMessages.scrollTop = DOM.chatMessages.scrollHeight;
 }
 
-// Pro Markdown Renderer with Marked & Highlight.js fallback
+// Pro Markdown Renderer with Marked & Highlight.js fallback + Table scroll wrapper
 function renderMarkdownText(text) {
   if (!text) return "";
   try {
     if (typeof marked !== "undefined") {
-      return marked.parse(text);
+      marked.setOptions({
+        gfm: true,
+        breaks: true,
+      });
+      let parsed = marked.parse(text);
+      // Ensure all <table> elements are wrapped in a responsive .table-scroll-wrap container
+      parsed = parsed.replace(/<table(\s*[\s\S]*?)<\/table>/gi, '<div class="table-scroll-wrap"><table$1</table></div>');
+      return parsed;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn("Marked parse error:", e);
+  }
 
-  // Fallback Simple Formatter
-  let html = escapeHtml(text);
+  // Fallback Formatter with Table support
+  let raw = text;
+  // Parse markdown tables if any
+  const lines = raw.split("\n");
+  let inTable = false;
+  let tableRows = [];
+  let outLines = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith("|") && line.endsWith("|")) {
+      if (!inTable) {
+        inTable = true;
+        tableRows = ['<div class="table-scroll-wrap"><table>'];
+      }
+      const cells = line.split("|").slice(1, -1).map(c => escapeHtml(c.trim()));
+      if (cells.every(c => /^:?-+:?$/.test(c))) {
+        continue;
+      }
+      const isHeader = tableRows.length === 1;
+      const tag = isHeader ? "th" : "td";
+      tableRows.push("<tr>" + cells.map(c => `<${tag}>${c}</${tag}>`).join("") + "</tr>");
+    } else {
+      if (inTable) {
+        inTable = false;
+        tableRows.push("</table></div>");
+        outLines.push(tableRows.join(""));
+        tableRows = [];
+      }
+      outLines.push(escapeHtml(line));
+    }
+  }
+  if (inTable) {
+    tableRows.push("</table></div>");
+    outLines.push(tableRows.join(""));
+  }
+
+  let html = outLines.join("<br/>");
   html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-  html = html.replace(/\n/g, "<br/>");
   return html;
 }
 
@@ -899,4 +983,16 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+// User Logout Handler
+async function handleLogout() {
+  try {
+    showToast("Signing out...", "info");
+    await fetch("/api/auth/logout", { method: "POST" });
+  } catch (e) {
+    console.error("Logout error:", e);
+  } finally {
+    window.location.href = "/login";
+  }
 }

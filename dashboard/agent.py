@@ -229,6 +229,75 @@ BASEROW_FIELD_MAP = {
     "ready_to_sync": "field_8511",
 }
 
+# Known brand and vendor normalization lookup
+KNOWN_BRAND_ALIASES = {
+    "spectrum": "Spectrum Design",
+    "spectrum design": "Spectrum Design",
+    "spectrumdesign": "Spectrum Design",
+    "design on stock": "Design On Stock",
+    "designonstock": "Design On Stock",
+    "sleep world": "Sleep World",
+    "sleepworld": "Sleep World",
+    "artifort": "Artifort",
+    "baenks": "Baenks",
+    "beek": "BEEK",
+    "bert plantagie": "Bert Plantagie",
+    "plantagie": "Bert Plantagie",
+    "castelijn": "Castelijn",
+    "eyye": "Eyye",
+    "harvink": "Harvink",
+    "leolux": "Leolux",
+    "montis": "Montis",
+    "pastoe": "Pastoe",
+    "brinker": "Brinker",
+    "estiluz": "Estiluz",
+    "jori": "Jori",
+    "metaform": "Metaform",
+    "brees new world": "Brees New World",
+    "brees": "Brees New World",
+    "gazzda": "Gazzda",
+    "cs rugs": "CS Rugs",
+    "pode": "Pode",
+    "label": "Label",
+    "fontana arte": "Fontana Arte",
+    "fontana": "Fontana Arte",
+    "odesi": "Odesi",
+    "evidence": "Evidence",
+    "artimeta": "Artimeta",
+    "tonone": "Tonone",
+    "gealux": "Gealux",
+    "janssens": "Janssens Oriënt",
+    "janssens orient": "Janssens Oriënt",
+    "janssens oriënt": "Janssens Oriënt",
+    "pronto": "Pronto Wonen",
+    "pronto wonen": "Pronto Wonen",
+    "profijt": "Profijt Meubel",
+    "profijt meubel": "Profijt Meubel",
+    "in house": "IN.HOUSE",
+    "inhouse": "IN.HOUSE",
+    "in.house": "IN.HOUSE",
+    "house of dutchz": "House of Dutchz",
+    "dutchz": "House of Dutchz",
+}
+
+
+def resolve_brand_vendor(vendor_name: str | None) -> str | None:
+    """Normalize vendor or brand name into canonical storefront form."""
+    if not vendor_name:
+        return None
+    raw = str(vendor_name).strip()
+    clean = raw.lower().replace("-", " ").replace(".", " ").replace("_", " ")
+    clean = " ".join(clean.split())
+
+    if clean in KNOWN_BRAND_ALIASES:
+        return KNOWN_BRAND_ALIASES[clean]
+
+    for alias_key, canonical in KNOWN_BRAND_ALIASES.items():
+        if alias_key in clean or clean in alias_key:
+            return canonical
+
+    return raw
+
 
 def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
     """Execute python tools directly against Baserow or Shopify."""
@@ -255,7 +324,7 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
                 "active_products": active_count,
                 "draft_products": draft_count,
                 "archived_products": archived_count,
-                "summary": f"Shopify has {total_count} total products ({active_count} active, {draft_count} draft, {archived_count} archived)."
+                "summary": f"Shopify has {total_count:,} total products ({active_count:,} active, {draft_count:,} draft, {archived_count:,} archived)."
             }
 
         # 2. Advanced Shopify Inventory & Product Query
@@ -263,36 +332,48 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             shop = ShopifyClient()
             inv_filter = args.get("inventory_filter", "all")
             status_filter = args.get("status", "all")
-            vendor = args.get("vendor")
+            raw_vendor = args.get("vendor")
+            resolved_vendor = resolve_brand_vendor(raw_vendor) if raw_vendor else None
             query = args.get("query")
             limit = min(args.get("limit", 15), 50)
 
-            # Fetch ALL Shopify products via pagination (cursor-based)
-            # Cap at 1000 products to keep response time reasonable
+            # Fetch Shopify products
             base_params: dict[str, Any] = {
                 "limit": 250,
                 "fields": "id,title,variants,vendor,status"
             }
             if status_filter and status_filter != "all":
                 base_params["status"] = status_filter
-            if vendor:
-                base_params["vendor"] = vendor
+            if resolved_vendor:
+                base_params["vendor"] = resolved_vendor
+            elif raw_vendor:
+                base_params["vendor"] = raw_vendor
             if query:
                 base_params["title"] = query
 
             all_prods = []
             MAX_PRODUCTS = 1000
-            next_page_url = None
 
             # First page
             resp = shop._request("GET", "/products.json", params=base_params)
             if not resp.ok:
                 return {"success": False, "error": f"Shopify request failed: {resp.text}"}
 
-            all_prods.extend(resp.json().get("products", []))
+            batch_prods = resp.json().get("products", [])
+            all_prods.extend(batch_prods)
 
-            # Paginate using Link header
-            while len(all_prods) < MAX_PRODUCTS:
+            # If vendor was queried and returned 0, try searching without vendor and filtering in Python
+            if (raw_vendor or resolved_vendor) and len(all_prods) == 0:
+                v_target = (resolved_vendor or raw_vendor).lower()
+                alt_resp = shop._request("GET", "/products.json", params={"limit": 250, "fields": "id,title,variants,vendor,status"})
+                if alt_resp.ok:
+                    for p in alt_resp.json().get("products", []):
+                        p_v = (p.get("vendor") or "").lower()
+                        if v_target in p_v or p_v in v_target:
+                            all_prods.append(p)
+
+            # Paginate using Link header if more products exist
+            while len(all_prods) < MAX_PRODUCTS and resp.ok:
                 link_header = resp.headers.get("Link", "")
                 next_url = None
                 for part in link_header.split(","):
@@ -302,14 +383,14 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
                         break
                 if not next_url:
                     break
-                # Extract page_info from next_url
                 from urllib.parse import urlparse, parse_qs
                 parsed = urlparse(next_url)
                 qparams = parse_qs(parsed.query)
                 page_info = qparams.get("page_info", [None])[0]
                 if not page_info:
                     break
-                resp = shop._request("GET", "/products.json", params={"limit": 250, "page_info": page_info, "fields": "id,title,variants,vendor,status"})
+                page_params = {"limit": 250, "page_info": page_info, "fields": "id,title,variants,vendor,status"}
+                resp = shop._request("GET", "/products.json", params=page_params)
                 if not resp.ok:
                     break
                 batch = resp.json().get("products", [])
@@ -317,12 +398,28 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
                     break
                 all_prods.extend(batch)
 
+            # Breakdowns
+            vendor_status_counts = {"active": 0, "draft": 0, "archived": 0}
+            vendor_inv_counts = {"in_stock": 0, "zero_stock": 0, "untracked": 0}
+            status_inventory_matrix = {
+                "active": {"total": 0, "in_stock": 0, "zero_stock": 0, "untracked_stock": 0},
+                "draft": {"total": 0, "in_stock": 0, "zero_stock": 0, "untracked_stock": 0},
+                "archived": {"total": 0, "in_stock": 0, "zero_stock": 0, "untracked_stock": 0},
+            }
+
             matching_products = []
             zero_stock_count = 0
             untracked_stock_count = 0
             in_stock_count = 0
 
             for p in all_prods:
+                p_status = p.get("status", "active").lower()
+                if p_status not in vendor_status_counts:
+                    vendor_status_counts[p_status] = 0
+                vendor_status_counts[p_status] += 1
+                if p_status in status_inventory_matrix:
+                    status_inventory_matrix[p_status]["total"] += 1
+
                 p_zero = False
                 p_untracked = False
                 p_in_stock = False
@@ -331,7 +428,7 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
                     qty = v.get("inventory_quantity")
                     mgmt = v.get("inventory_management")
 
-                    if mgmt is None or mgmt == "":
+                    if mgmt is None or mgmt == "" or str(mgmt).lower() == "none":
                         p_untracked = True
                     elif qty is not None and qty <= 0:
                         p_zero = True
@@ -340,12 +437,21 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
 
                 if p_zero:
                     zero_stock_count += 1
+                    vendor_inv_counts["zero_stock"] += 1
+                    if p_status in status_inventory_matrix:
+                        status_inventory_matrix[p_status]["zero_stock"] += 1
                 if p_untracked:
                     untracked_stock_count += 1
+                    vendor_inv_counts["untracked"] += 1
+                    if p_status in status_inventory_matrix:
+                        status_inventory_matrix[p_status]["untracked_stock"] += 1
                 if p_in_stock:
                     in_stock_count += 1
+                    vendor_inv_counts["in_stock"] += 1
+                    if p_status in status_inventory_matrix:
+                        status_inventory_matrix[p_status]["in_stock"] += 1
 
-                # Apply filter match
+                # Filter matching
                 match = False
                 if inv_filter == "all":
                     match = True
@@ -359,36 +465,46 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
                     match = True
 
                 if match:
+                    v0 = p.get("variants", [{}])[0]
+                    mgmt_str = v0.get("inventory_management")
+                    if not mgmt_str or str(mgmt_str).lower() == "none":
+                        mgmt_display = "Untracked (No Inventory Set)"
+                    else:
+                        mgmt_display = f"Tracked ({mgmt_str})"
+
                     matching_products.append({
                         "id": p["id"],
                         "title": p["title"],
                         "vendor": p.get("vendor"),
                         "status": p.get("status"),
                         "variants_count": len(p.get("variants", [])),
-                        "sample_price": p.get("variants", [{}])[0].get("price", "0.00"),
-                        "inventory_management": p.get("variants", [{}])[0].get("inventory_management") or "Not tracked",
-                        "inventory_quantity": p.get("variants", [{}])[0].get("inventory_quantity"),
+                        "sample_price": v0.get("price", "0.00"),
+                        "inventory_management": mgmt_display,
+                        "inventory_quantity": v0.get("inventory_quantity", 0),
                     })
 
-            # Get total count on Shopify for reference
+            # Total store count
             r_tot = shop._request("GET", "/products/count.json")
             total_shop_count = r_tot.json().get("count", 0) if r_tot.ok else 0
 
             return {
                 "success": True,
+                "vendor_queried": resolved_vendor or raw_vendor,
+                "total_vendor_products": len(all_prods) if (raw_vendor or resolved_vendor) else None,
                 "total_shopify_products_in_store": total_shop_count,
                 "total_products_analyzed": len(all_prods),
-                "fully_analyzed": len(all_prods) >= total_shop_count,
                 "filter_applied": {
                     "inventory_filter": inv_filter,
                     "status": status_filter,
-                    "vendor": vendor,
+                    "vendor": resolved_vendor or raw_vendor,
                 },
-                "stock_analysis_counts": {
+                "status_breakdown": vendor_status_counts,
+                "inventory_breakdown": {
+                    "in_stock_products": in_stock_count,
                     "zero_stock_products": zero_stock_count,
                     "untracked_stock_products_no_value_entered": untracked_stock_count,
-                    "in_stock_products": in_stock_count,
                 },
+                "status_inventory_matrix": status_inventory_matrix,
                 "total_matching_items": len(matching_products),
                 "sample_results": matching_products[:limit],
             }
@@ -401,27 +517,46 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             field_input = str(args["field_name"]).strip().lower().replace(" ", "_")
             field_id = BASEROW_FIELD_MAP.get(field_input, args["field_name"])
             condition = args.get("condition", "empty")
-            val = args.get("value", "")
+            val = str(args.get("value", "")).strip()
             limit = min(args.get("limit", 10), 50)
 
-            # Build Baserow filter query
             params: dict[str, Any] = {
                 "size": limit,
                 "user_field_names": "true",
             }
 
-            if condition == "empty":
-                params[f"filter__{field_id}__empty"] = ""
-            elif condition == "not_empty":
-                params[f"filter__{field_id}__not_empty"] = ""
-            elif condition == "equal":
-                params[f"filter__{field_id}__equal"] = val
-            elif condition == "contains":
-                params[f"filter__{field_id}__contains"] = val
-            elif condition == "greater_than":
-                params[f"filter__{field_id}__higher_than"] = val
-            elif condition == "less_than":
-                params[f"filter__{field_id}__lower_than"] = val
+            # Special handling for brand link_row field (field_7376)
+            if field_id in ("field_7376", "brand_table", "brand") and condition in ("equal", "contains") and val:
+                resolved_bname = resolve_brand_vendor(val) or val
+                # Find brand row ID in brands table
+                r_brand_lookup = client.session.get(
+                    f"{settings.api_base}/database/rows/table/{settings.brands_table_id}/",
+                    params={"size": 10, "search": resolved_bname},
+                    timeout=15
+                )
+                brand_row_id = None
+                if r_brand_lookup.ok:
+                    b_results = r_brand_lookup.json().get("results", [])
+                    if b_results:
+                        brand_row_id = b_results[0]["id"]
+
+                if brand_row_id:
+                    params["filter__field_7376__link_row_has"] = str(brand_row_id)
+                else:
+                    params["search"] = resolved_bname
+            else:
+                if condition == "empty":
+                    params[f"filter__{field_id}__empty"] = ""
+                elif condition == "not_empty":
+                    params[f"filter__{field_id}__not_empty"] = ""
+                elif condition == "equal":
+                    params[f"filter__{field_id}__equal"] = val
+                elif condition == "contains":
+                    params[f"filter__{field_id}__contains"] = val
+                elif condition == "greater_than":
+                    params[f"filter__{field_id}__higher_than"] = val
+                elif condition == "less_than":
+                    params[f"filter__{field_id}__lower_than"] = val
 
             resp = client.session.get(
                 f"{settings.api_base}/database/rows/table/{settings.products_table_id}/",
@@ -438,14 +573,24 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
 
             formatted_rows = []
             for r in rows:
+                p_name = r.get("product_name") or r.get("field_7347") or f"Product #{r.get('id')}"
+                p_price = r.get("price") or r.get("field_7371") or "Empty / Missing"
+                p_score = r.get("Score") or r.get("field_7394") or "—"
+                p_status = r.get("Status") or r.get("field_7353") or "Active"
+                p_woonbloq = r.get("WoonbloqProductID") or r.get("field_7425") or "Not Synced"
+                brand_val = "—"
+                b_link = r.get("Brand_table") or r.get("field_7376")
+                if isinstance(b_link, list) and b_link:
+                    brand_val = b_link[0].get("value", "—")
+
                 formatted_rows.append({
                     "id": r.get("id"),
-                    "name": r.get("product_name") or r.get("field_7347") or f"Product #{r.get('id')}",
-                    "price": r.get("price") or r.get("field_7371"),
-                    "score": r.get("Score") or r.get("field_7394"),
-                    "status": r.get("Status") or r.get("field_7353"),
-                    "woonbloq_id": r.get("WoonbloqProductID") or r.get("field_7425"),
-                    "brand": (r.get("Brand_table") or [{}])[0].get("value") if isinstance(r.get("Brand_table"), list) and r.get("Brand_table") else "—",
+                    "name": p_name,
+                    "price": p_price,
+                    "score": p_score,
+                    "status": p_status,
+                    "woonbloq_id": p_woonbloq,
+                    "brand": brand_val,
                 })
 
             return {
@@ -464,11 +609,9 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             client = BaserowClient(settings)
             shop = ShopifyClient()
 
-            # Baserow count
             r_base = client.session.get(f"{settings.api_base}/database/rows/table/{settings.products_table_id}/?size=1", timeout=15)
             base_count = r_base.json().get("count", 0) if r_base.ok else 0
 
-            # Shopify counts
             r_shop = shop._request("GET", "/products/count.json")
             shop_count = r_shop.json().get("count", 0) if r_shop.ok else 0
 
@@ -478,7 +621,6 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             r_dft = shop._request("GET", "/products/count.json", params={"status": "draft"})
             shop_draft = r_dft.json().get("count", 0) if r_dft.ok else 0
 
-            # Linked in Baserow with WoonbloqProductID
             r_link = client.session.get(
                 f"{settings.api_base}/database/rows/table/{settings.products_table_id}/",
                 params={"size": 1, "filter__field_7425__not_empty": ""},
@@ -494,6 +636,7 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
                 "shopify_draft_products": shop_draft,
                 "linked_to_shopify": linked_count,
                 "unlinked_pending_sync": max(0, base_count - linked_count),
+                "sync_coverage_percentage": round((linked_count / max(1, base_count)) * 100, 1)
             }
 
         # 5. Search Baserow
@@ -540,7 +683,8 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             if args.get("title"):
                 params["title"] = args["title"]
             if args.get("vendor"):
-                params["vendor"] = args["vendor"]
+                resolved_v = resolve_brand_vendor(args["vendor"])
+                params["vendor"] = resolved_v or args["vendor"]
             if args.get("status"):
                 params["status"] = args["status"]
             resp = requests.get(f"{cfg.admin_base}/products.json", headers=headers, params=params, timeout=30)
@@ -587,7 +731,7 @@ def run_agent_chat(messages: list[dict[str, Any]], model: str = "anthropic/claud
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip().strip('"')
     if not api_key:
         return {
-            "reply": "⚠️ OpenRouter API Key is missing in `.env`. Please add OPENROUTER_API_KEY.",
+            "reply": "[System Notice] OpenRouter API Key is missing in `.env`. Please add OPENROUTER_API_KEY.",
             "tool_calls": []
         }
 
@@ -596,30 +740,44 @@ def run_agent_chat(messages: list[dict[str, Any]], model: str = "anthropic/claud
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "http://localhost:8000",
-        "X-Title": "Binnen Store Agent",
+        "X-Title": "Binnen Catalog OS Copilot",
     }
 
     system_prompt = (
-        "You are an executive AI Catalog & Multi-Storefront Intelligence Assistant for Binnen / Woonbloq. "
-        "You have direct real-time access to Baserow and the live Shopify Woonbloq storefront. "
-        "NEVER mention internal database table IDs (like Table 742, Table 745, field_7347, etc.) or table names to the user. Always say 'Baserow' instead.\n\n"
-        "TOOL ROUTING RULES — always call the appropriate tool before answering:\n"
-        "1. 'How many total products in Shopify?' or 'what is total Shopify count?' → call `get_shopify_catalog_stats`\n"
+        "You are an executive AI Catalog & Multi-Storefront Intelligence Assistant for Binnen / Woonbloq.\n"
+        "You have direct real-time API access to the live Baserow Master Catalog and the live Shopify Woonbloq storefront.\n\n"
+        "DATABASE PRIVACY & TERMINOLOGY RULES:\n"
+        "- NEVER mention third-party AI model names (such as Claude, Anthropic, GPT, OpenAI, etc.). You are exclusively the 'Binnen Catalog OS Copilot' or 'Binnen Autonomous AI'.\n"
+        "- NEVER mention internal database table IDs (like Table 742, Table 785, field_7347, field_7376, etc.) or technical API parameter names to the user.\n"
+        "- Always refer to the central system as 'Baserow Master Catalog' and the ecommerce store as 'Woonbloq Shopify Storefront'.\n"
+        "- SOURCE URL PRIVACY: NEVER display, output, or link to external original supplier or scraped website URLs. All catalog items belong to Baserow & Woonbloq storefront.\n\n"
+        "TOOL ROUTING RULES (ALWAYS call the exact appropriate tool before answering):\n"
+        "1. 'How many total products in Shopify?' or 'Shopify total product count' → call `get_shopify_catalog_stats`\n"
         "2. 'How many products in Shopify where stock is 0 / zero / not entered / untracked?' → call `query_shopify_products_advanced` with inventory_filter='zero_or_untracked'\n"
-        "3. 'How many products in Shopify where stock is 0?' → call `query_shopify_products_advanced` with inventory_filter='zero_stock'\n"
-        "4. 'How many products in Shopify where stock is not entered / no value?' → call `query_shopify_products_advanced` with inventory_filter='untracked_stock'\n"
-        "5. 'How many products in Shopify with in-stock / stock > 0?' → call `query_shopify_products_advanced` with inventory_filter='in_stock'\n"
-        "6. 'How many products in Baserow where [column] is empty / 0 / missing?' → call `query_baserow_products_filtered` with appropriate field_name and condition='empty'\n"
-        "7. 'How many products in Baserow where [column] equals [value]?' → call `query_baserow_products_filtered` with condition='equal' and value\n"
-        "8. 'How many products in Baserow where price is missing / empty?' → call `query_baserow_products_filtered` with field_name='price' and condition='empty'\n"
-        "9. Overall sync health → call `get_catalog_overview`\n\n"
-        "IMPORTANT: When user asks 'how many products where [column] [condition]', you MUST call the tool and return the EXACT count from the API. "
-        "Do NOT guess or use cached values. "
-        "Structure all answers in executive format: bold key numbers, use bullet points, present clean tables where applicable.\n"
-        "For Shopify stock queries: note that 'analyzed_batch_size' is the number of products fetched in one API call (max 250). "
-        "If the store has more than 250 products, mention you analyzed a sample batch and the counts are from that batch. "
-        "Always show the total store count alongside the batch analysis results.\n"
-        "SOURCE URL PRIVACY RULE: NEVER display, output, or link to external original supplier or scraped website URLs. All catalog items belong to Baserow & Woonbloq storefront."
+        "3. 'Filter Shopify products by vendor [Brand] and check stock status' → call `query_shopify_products_advanced` with vendor='[Brand]' and inventory_filter='all'\n"
+        "4. 'How many products in Shopify where stock is 0?' → call `query_shopify_products_advanced` with inventory_filter='zero_stock'\n"
+        "5. 'How many products in Shopify where stock is not entered / untracked?' → call `query_shopify_products_advanced` with inventory_filter='untracked_stock'\n"
+        "6. 'How many products in Baserow where [column] is empty / missing?' → call `query_baserow_products_filtered` with field_name='[column]' and condition='empty'\n"
+        "7. 'How many products in Baserow where price is empty / missing?' → call `query_baserow_products_filtered` with field_name='price' and condition='empty'\n"
+        "8. 'How many products in Baserow are missing Dutch AI descriptions?' → call `query_baserow_products_filtered` with field_name='ai_description_translated_NL' and condition='empty'\n"
+        "9. 'Overall sync coverage or health between Baserow & Shopify' → call `get_catalog_overview`\n\n"
+        "PROFESSIONAL RESPONSE FORMATTING & DESIGN RULES:\n"
+        "- Present every response in executive C-level report styling with clean headings.\n"
+        "- MANDATORY: For all breakdowns, metrics, and lists of items, ALWAYS use standard Markdown Tables (`| Col 1 | Col 2 | ... |`).\n"
+        "- NEVER output tab-delimited text or raw unformatted blocks for tables.\n"
+        "- Format all counts with thousands separators (e.g. `6,492`, `6,366`, `32`).\n"
+        "- Highlight key numbers with bold markdown.\n"
+        "- DO NOT use informal emojis. Use clean executive status tags and badges instead:\n"
+        "  - [Active] / [In Stock]\n"
+        "  - [Untracked Inventory]\n"
+        "  - [Zero Stock / Out of Stock]\n"
+        "  - [Draft / Pending Sync]\n"
+        "- When auditing a vendor (e.g. Spectrum Design):\n"
+        "  1. Start with an executive summary heading with Brand Name, Total Products, and Storefront name.\n"
+        "  2. Provide a 5-column Status & Inventory Markdown Table (Status | Total Products | In Stock (Qty > 0) | Zero Stock (Qty <= 0) | Untracked Stock).\n"
+        "  3. Provide Key Insights (bullet points explaining active status, whether inventory is tracked or untracked).\n"
+        "  4. Provide a Sample Products Markdown Table with Product Title, Status, Price (€), and Inventory Status.\n"
+        "- Keep the tone authoritative, concise, helpful, and strictly professional."
     )
 
     conversation = [{"role": "system", "content": system_prompt}] + messages
