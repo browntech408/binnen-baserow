@@ -4,11 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=binnen
 WorkingDirectory=/home/binnen/app
-Environment="PATH=/home/binnen/app/.venv/bin"
-EnvironmentFile=/home/binnen/app/.env
-ExecStart=/home/binnen/app/.venv/bin/python sync_daemon.py
+ExecStart=/home/binnen/app/.venv/bin/python /home/binnen/app/sync_daemon.py
 Restart=always
 RestartSec=5s
 StandardOutput=journal
