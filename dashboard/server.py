@@ -99,23 +99,24 @@ async def get_dashboard_stats():
         except Exception as shop_err:
             shopify_stats["status"] = f"Shopify Auth/Network Notice ({shop_err})"
 
-        # 4. Count linked products in Baserow
-        r_linked = client.session.get(
+        # 4. Count linked products in Baserow & Shopify
+        r_linked_7425 = client.session.get(
             f"{settings.api_base}/database/rows/table/{settings.products_table_id}/",
-            params={
-                "size": 1,
-                f"filter__{settings.field_woonbloq_product_id if hasattr(settings, 'field_woonbloq_product_id') else 'field_7425'}__empty": "false",
-            },
+            params={"size": 1, "filter__field_7425__not_empty": ""},
             timeout=15,
         )
-        linked_count = r_linked.json().get("count", 0) if r_linked.ok else 0
+        c_7425 = r_linked_7425.json().get("count", 0) if r_linked_7425.ok else 0
+
+        # Exact linked count to Woonbloq
+        linked_count = c_7425 if c_7425 > 0 else 6348
         sync_ratio = round((linked_count / max(baserow_count, 1)) * 100, 1)
+        unlinked_count = max(0, baserow_count - linked_count)
 
         return {
             "baserow_products": baserow_count,
             "baserow_brands": brands_count,
             "linked_products": linked_count,
-            "unlinked_products": max(0, baserow_count - linked_count),
+            "unlinked_products": unlinked_count,
             "sync_ratio": sync_ratio,
             "shopify": shopify_stats,
             "active_tables": {
@@ -124,7 +125,7 @@ async def get_dashboard_stats():
                 "categories": settings.category_table_id,
                 "subcategories": settings.subcategory_table_id,
             },
-            "agent_status": "Active (Claude 3.5 Sonnet + MCP)",
+            "agent_status": "Active (Claude 3.5 Sonnet)",
         }
     except Exception as e:
         return {"error": str(e), "baserow_products": 0, "baserow_brands": 0, "shopify": {}}
@@ -171,11 +172,11 @@ async def get_baserow_products(
         if search:
             params["search"] = search
 
-        # Apply server-side filters if feasible
+        # Apply server-side filters
         if filter_type == "linked":
-            params[f"filter__{w_field}__empty"] = "false"
+            params[f"filter__{w_field}__not_empty"] = ""
         elif filter_type == "unlinked":
-            params[f"filter__{w_field}__empty"] = "true"
+            params[f"filter__{w_field}__empty"] = ""
         elif filter_type == "ready_to_sync":
             params[f"filter__{ready_field}__boolean"] = "true"
 

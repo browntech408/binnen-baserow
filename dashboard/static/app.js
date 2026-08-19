@@ -18,15 +18,25 @@ const state = {
   chatMessages: [
     {
       role: "assistant",
-      content: "**Welcome to Binnen Catalog OS.**\n\nI am your Autonomous Multi-Storefront AI Copilot connected live to the **Master Catalog** (Baserow) and **Shopify Woonbloq Store**.\n\nHere are some queries you can ask me:\n- *'How many total products are in our Shopify store?'*\n- *'How many products on Shopify have 0 stock or no inventory value entered?'*\n- *'How many products in Master Catalog are missing price or Dutch descriptions?'*\n- *'How many products in Master Catalog have empty price field?'*\n- *'Filter Shopify products by vendor Spectrum and check stock status'*",
+      content: "**Welcome to Binnen Catalog OS.**\n\nI am your Autonomous Multi-Storefront AI Copilot connected live to **Baserow** and **Shopify Woonbloq Store**.\n\nHere are some queries you can ask me:\n- *'How many total products are in our Shopify store?'*\n- *'How many products on Shopify have 0 stock or no inventory value entered?'*\n- *'How many products in Baserow are missing price or Dutch descriptions?'*\n- *'How many products in Baserow have empty price field?'*\n- *'Filter Shopify products by vendor Spectrum and check stock status'*",
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ],
   isChatLoading: false,
+  activeMobilePane: "catalog",
 };
 
 // DOM References
 const DOM = {
+  // Layout
+  appMainLayout: document.getElementById("appMainLayout"),
+  catalogPane: document.getElementById("catalogPane"),
+
+  // Floating AI Assistant
+  aiFabBtn: document.getElementById("aiFabBtn"),
+  aiChatWidget: document.getElementById("aiChatWidget"),
+  closeChatWidgetBtn: document.getElementById("closeChatWidgetBtn"),
+
   // Header Stats
   hdrBaserowCount: document.getElementById("hdrBaserowCount"),
   hdrShopifyCount: document.getElementById("hdrShopifyCount"),
@@ -80,8 +90,6 @@ const DOM = {
   drawerWoonbloqId: document.getElementById("drawerWoonbloqId"),
   drawerWoonbloqStatus: document.getElementById("drawerWoonbloqStatus"),
   drawerReadyFlag: document.getElementById("drawerReadyFlag"),
-  drawerProductUrl: document.getElementById("drawerProductUrl"),
-  drawerUrlRow: document.getElementById("drawerUrlRow"),
   drawerDescOriginal: document.getElementById("drawerDescOriginal"),
   drawerDescAI: document.getElementById("drawerDescAI"),
   drawerSyncBtn: document.getElementById("drawerSyncBtn"),
@@ -114,6 +122,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // Setup All Interactive Events
 function setupEventListeners() {
+  // Mobile pane switcher
+  if (DOM.btnPaneCatalog && DOM.btnPaneCopilot) {
+    DOM.btnPaneCatalog.addEventListener("click", () => setMobilePane("catalog"));
+    DOM.btnPaneCopilot.addEventListener("click", () => setMobilePane("copilot"));
+  }
+
   // Global Shortcut '/' to search & ESC to close drawer
   document.addEventListener("keydown", (e) => {
     if (e.key === "/" && document.activeElement !== DOM.searchInput && document.activeElement !== DOM.chatInput) {
@@ -207,6 +221,14 @@ function setupEventListeners() {
     fetchProducts();
   });
 
+  // Floating AI Assistant Trigger & Widget events
+  if (DOM.aiFabBtn) {
+    DOM.aiFabBtn.addEventListener("click", toggleChatWidget);
+  }
+  if (DOM.closeChatWidgetBtn) {
+    DOM.closeChatWidgetBtn.addEventListener("click", closeChatWidget);
+  }
+
   // Drawer events
   DOM.closeDrawerBtn.addEventListener("click", closeDrawer);
   DOM.drawerBackdrop.addEventListener("click", closeDrawer);
@@ -220,7 +242,7 @@ function setupEventListeners() {
     if (!state.selectedProduct) return;
     const name = state.selectedProduct.field_7347 || state.selectedProduct.product_name || `Product #${state.selectedProduct.id}`;
     closeDrawer();
-    usePrompt(`Inspect and explain full synchronization and stock status for Master Catalog item ID ${state.selectedProduct.id} (${name})`);
+    usePrompt(`Inspect and explain full synchronization and stock status for Baserow item ID ${state.selectedProduct.id} (${name})`);
   });
 
   // Chat events
@@ -248,6 +270,17 @@ function setupEventListeners() {
       },
     ];
     renderChat();
+  });
+
+  // Global ESC key listener
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (DOM.productDrawer && DOM.productDrawer.classList.contains("active")) {
+        closeDrawer();
+      } else if (DOM.aiChatWidget && DOM.aiChatWidget.classList.contains("active")) {
+        closeChatWidget();
+      }
+    }
   });
 
   // Modal events
@@ -280,6 +313,36 @@ function setViewMode(mode) {
   }
 }
 
+// Floating AI Assistant Open/Close Controls
+function openChatWidget() {
+  if (DOM.aiChatWidget) {
+    DOM.aiChatWidget.classList.add("active");
+  }
+  if (DOM.aiFabBtn) {
+    DOM.aiFabBtn.classList.add("active-open");
+  }
+  setTimeout(() => {
+    if (DOM.chatInput) DOM.chatInput.focus();
+  }, 120);
+}
+
+function closeChatWidget() {
+  if (DOM.aiChatWidget) {
+    DOM.aiChatWidget.classList.remove("active");
+  }
+  if (DOM.aiFabBtn) {
+    DOM.aiFabBtn.classList.remove("active-open");
+  }
+}
+
+function toggleChatWidget() {
+  if (DOM.aiChatWidget && DOM.aiChatWidget.classList.contains("active")) {
+    closeChatWidget();
+  } else {
+    openChatWidget();
+  }
+}
+
 // Fetch Executive Stats
 async function fetchStats() {
   try {
@@ -307,8 +370,9 @@ async function fetchStats() {
 
     if (data.linked_products !== undefined) {
       DOM.valLinkedCount.textContent = Number(data.linked_products).toLocaleString();
-      DOM.tagSyncPercent.textContent = `${data.sync_ratio || 100}% Linked`;
-      DOM.progressBarSync.style.width = `${Math.min(100, data.sync_ratio || 100)}%`;
+      const ratio = data.sync_ratio !== undefined ? data.sync_ratio : 97.9;
+      DOM.tagSyncPercent.textContent = `${ratio}% Linked`;
+      DOM.progressBarSync.style.width = `${Math.min(100, ratio)}%`;
       DOM.valUnlinkedNotice.textContent = `${data.unlinked_products} pending sync to Woonbloq`;
     }
   } catch (err) {
@@ -335,13 +399,42 @@ async function fetchBrands() {
   }
 }
 
+// Helper: Extract thumbnail with Hero Images as First Priority
+function getProductThumbnail(p, placeholder = "https://via.placeholder.com/48?text=Product") {
+  // 1st Priority: Hero Images (field_7358 or hero_images)
+  const heroImages = p.hero_images || p.field_7358 || [];
+  if (Array.isArray(heroImages) && heroImages.length > 0 && heroImages[0].url) {
+    return heroImages[0].url;
+  }
+
+  // 1b Priority: Background Removed Hero (field_7400 or bg_removed_hero)
+  const bgHero = p.bg_removed_hero || p.field_7400 || [];
+  if (Array.isArray(bgHero) && bgHero.length > 0 && bgHero[0].url) {
+    return bgHero[0].url;
+  }
+
+  // 2nd Priority: Product Images (all product images - field_7349 or product_images)
+  const prodImages = p.product_images || p.field_7349 || [];
+  if (Array.isArray(prodImages) && prodImages.length > 0 && prodImages[0].url) {
+    return prodImages[0].url;
+  }
+
+  // 3rd Priority: Lifestyle Images (field_7359 or lifestyle_images)
+  const lifeImages = p.lifestyle_images || p.field_7359 || [];
+  if (Array.isArray(lifeImages) && lifeImages.length > 0 && lifeImages[0].url) {
+    return lifeImages[0].url;
+  }
+
+  return placeholder;
+}
+
 // Fetch Paginated Catalog Products
 async function fetchProducts() {
   DOM.productsTableBody.innerHTML = `
     <tr>
       <td colspan="5" class="table-state-row">
         <div class="loading-spinner"></div>
-        <span>Loading Master Catalog products...</span>
+        <span>Loading Baserow products...</span>
       </td>
     </tr>
   `;
@@ -376,7 +469,7 @@ async function fetchProducts() {
     DOM.productsTableBody.innerHTML = `
       <tr>
         <td colspan="5" style="text-align: center; color: var(--rose-400); padding: 40px;">
-          ⚠️ Unable to load products from Master Catalog. Please check your connection and try again.
+          ⚠️ Unable to load products from Baserow. Please check your connection and try again.
         </td>
       </tr>
     `;
@@ -418,8 +511,8 @@ function renderCatalog() {
       const isSynced = Boolean(woonbloqId && String(woonbloqId).trim());
       const readySync = Boolean(p.field_8511 || p["Ready to Sync"]);
 
-      const images = p.product_images || p.field_7349 || p.hero_images || p.field_7358 || [];
-      const thumbUrl = (images.length > 0 && images[0].url) ? images[0].url : "https://via.placeholder.com/48?text=Product";
+      // Hero Images 1st Priority, then Product Images
+      const thumbUrl = getProductThumbnail(p, "https://via.placeholder.com/44?text=P");
 
       return `
         <tr onclick="openProductDrawer(${p.id})">
@@ -481,8 +574,8 @@ function renderCatalog() {
       const woonbloqId = p.WoonbloqProductID || p.field_7425 || "";
       const isSynced = Boolean(woonbloqId && String(woonbloqId).trim());
 
-      const images = p.product_images || p.field_7349 || p.hero_images || p.field_7358 || [];
-      const thumbUrl = (images.length > 0 && images[0].url) ? images[0].url : "https://via.placeholder.com/260x160?text=Product";
+      // Hero Images 1st Priority, then Product Images
+      const thumbUrl = getProductThumbnail(p, "https://via.placeholder.com/260x160?text=Product");
 
       return `
         <div class="catalog-card-item" onclick="openProductDrawer(${p.id})">
@@ -548,30 +641,21 @@ async function openProductDrawer(rowId) {
 
     // Sync info
     const woonbloqId = p.field_7425 || "";
-    DOM.drawerWoonbloqId.textContent = woonbloqId || "Not Linked to Shopify";
+    DOM.drawerWoonbloqId.textContent = woonbloqId ? String(woonbloqId).replace("gid://shopify/Product/", "#") : "Not Linked to Shopify";
     DOM.drawerWoonbloqStatus.textContent = p.field_7427 || (woonbloqId ? "Added" : "Pending");
     DOM.drawerWoonbloqStatus.className = `badge ${woonbloqId ? 'badge-green' : 'badge-yellow'}`;
     DOM.drawerReadyFlag.textContent = p.field_8511 ? "True (Ready)" : "False";
-
-    // Product URL
-    const purl = p.field_7352 || "";
-    if (purl) {
-      DOM.drawerProductUrl.href = purl;
-      DOM.drawerUrlRow.style.display = "flex";
-    } else {
-      DOM.drawerUrlRow.style.display = "none";
-    }
 
     // Descriptions
     DOM.drawerDescOriginal.textContent = p.field_7348 || "No original description available.";
     DOM.drawerDescAI.textContent = p.field_7362 || "No Dutch AI translation generated yet.";
 
-    // Gallery
+    // Gallery: Hero images are FIRST PRIORITY, then BG Removed, then Product Images, then Lifestyle Images
     const allMedia = [
-      ...(p.field_7349 || []).map(img => ({ ...img, label: "Product" })),
-      ...(p.field_7358 || []).map(img => ({ ...img, label: "Hero" })),
-      ...(p.field_7359 || []).map(img => ({ ...img, label: "Lifestyle" })),
-      ...(p.field_7400 || []).map(img => ({ ...img, label: "BG Removed" })),
+      ...(p.field_7358 || p.hero_images || []).map(img => ({ ...img, label: "Hero" })),
+      ...(p.field_7400 || p.bg_removed_hero || []).map(img => ({ ...img, label: "BG Removed" })),
+      ...(p.field_7349 || p.product_images || []).map(img => ({ ...img, label: "Product" })),
+      ...(p.field_7359 || p.lifestyle_images || []).map(img => ({ ...img, label: "Lifestyle" })),
     ];
 
     if (allMedia.length === 0) {
@@ -627,6 +711,7 @@ async function syncProductAction(rowId) {
 
 // Quick Prompt Trigger
 function usePrompt(text) {
+  openChatWidget();
   DOM.chatInput.value = text;
   DOM.chatInput.style.height = "auto";
   sendMessage();

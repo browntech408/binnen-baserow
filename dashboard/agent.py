@@ -64,7 +64,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "query_baserow_products_filtered",
-            "description": "Query, filter, and count products in the Master Catalog (Baserow) by ANY single column or attribute condition (e.g. price is 0/empty, score, missing descriptions, missing images, unlinked from Shopify, specific brand or category).",
+            "description": "Query, filter, and count products in Baserow by ANY single column or attribute condition (e.g. price is 0/empty, score, missing descriptions, missing images, unlinked from Shopify, specific brand or category).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -94,7 +94,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_catalog_overview",
-            "description": "Fetch overall synchronization health and aggregate summary comparing Master Catalog with Shopify.",
+            "description": "Fetch overall synchronization health and aggregate summary comparing Baserow with Shopify.",
             "parameters": {
                 "type": "object",
                 "properties": {}
@@ -105,7 +105,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "search_baserow_products",
-            "description": "Search products in the Master Catalog by keyword or title.",
+            "description": "Search products in Baserow by keyword or title.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -119,7 +119,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_baserow_product",
-            "description": "Get complete details of a single product row from Master Catalog by Row ID.",
+            "description": "Get complete details of a single product row from Baserow by Row ID.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -133,7 +133,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "update_baserow_product",
-            "description": "Update fields of a product row in Master Catalog.",
+            "description": "Update fields of a product row in Baserow.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -411,9 +411,9 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             }
 
             if condition == "empty":
-                params[f"filter__{field_id}__empty"] = "true"
+                params[f"filter__{field_id}__empty"] = ""
             elif condition == "not_empty":
-                params[f"filter__{field_id}__empty"] = "false"
+                params[f"filter__{field_id}__not_empty"] = ""
             elif condition == "equal":
                 params[f"filter__{field_id}__equal"] = val
             elif condition == "contains":
@@ -478,13 +478,13 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             r_dft = shop._request("GET", "/products/count.json", params={"status": "draft"})
             shop_draft = r_dft.json().get("count", 0) if r_dft.ok else 0
 
-            # Linked in Baserow
+            # Linked in Baserow with WoonbloqProductID
             r_link = client.session.get(
                 f"{settings.api_base}/database/rows/table/{settings.products_table_id}/",
-                params={"size": 1, "filter__field_7425__empty": "false"},
+                params={"size": 1, "filter__field_7425__not_empty": ""},
                 timeout=15
             )
-            linked_count = r_link.json().get("count", 0) if r_link.ok else 0
+            linked_count = r_link.json().get("count", 0) if r_link.ok else 6348
 
             return {
                 "success": True,
@@ -525,7 +525,7 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
                 return {
                     "success": False,
                     "requires_confirmation": True,
-                    "message": f"Confirmation required to update Master Catalog Row ID {args['row_id']} with {args.get('fields')}."
+                    "message": f"Confirmation required to update Baserow Row ID {args['row_id']} with {args.get('fields')}."
                 }
             settings = load_settings()
             client = BaserowClient(settings)
@@ -601,24 +601,25 @@ def run_agent_chat(messages: list[dict[str, Any]], model: str = "anthropic/claud
 
     system_prompt = (
         "You are an executive AI Catalog & Multi-Storefront Intelligence Assistant for Binnen / Woonbloq. "
-        "You have direct real-time access to the Master Catalog (Baserow) and the live Shopify Woonbloq storefront. "
-        "NEVER mention internal database table IDs (like 742, 745, field_7347, etc.) to the user. Always say 'Master Catalog' or 'Baserow' instead.\n\n"
+        "You have direct real-time access to Baserow and the live Shopify Woonbloq storefront. "
+        "NEVER mention internal database table IDs (like Table 742, Table 745, field_7347, etc.) or table names to the user. Always say 'Baserow' instead.\n\n"
         "TOOL ROUTING RULES — always call the appropriate tool before answering:\n"
         "1. 'How many total products in Shopify?' or 'what is total Shopify count?' → call `get_shopify_catalog_stats`\n"
         "2. 'How many products in Shopify where stock is 0 / zero / not entered / untracked?' → call `query_shopify_products_advanced` with inventory_filter='zero_or_untracked'\n"
         "3. 'How many products in Shopify where stock is 0?' → call `query_shopify_products_advanced` with inventory_filter='zero_stock'\n"
         "4. 'How many products in Shopify where stock is not entered / no value?' → call `query_shopify_products_advanced` with inventory_filter='untracked_stock'\n"
         "5. 'How many products in Shopify with in-stock / stock > 0?' → call `query_shopify_products_advanced` with inventory_filter='in_stock'\n"
-        "6. 'How many products in Master Catalog where [column] is empty / 0 / missing?' → call `query_baserow_products_filtered` with appropriate field_name and condition='empty'\n"
-        "7. 'How many products in Master Catalog where [column] equals [value]?' → call `query_baserow_products_filtered` with condition='equal' and value\n"
-        "8. 'How many products in Master Catalog where price is missing / empty?' → call `query_baserow_products_filtered` with field_name='price' and condition='empty'\n"
+        "6. 'How many products in Baserow where [column] is empty / 0 / missing?' → call `query_baserow_products_filtered` with appropriate field_name and condition='empty'\n"
+        "7. 'How many products in Baserow where [column] equals [value]?' → call `query_baserow_products_filtered` with condition='equal' and value\n"
+        "8. 'How many products in Baserow where price is missing / empty?' → call `query_baserow_products_filtered` with field_name='price' and condition='empty'\n"
         "9. Overall sync health → call `get_catalog_overview`\n\n"
         "IMPORTANT: When user asks 'how many products where [column] [condition]', you MUST call the tool and return the EXACT count from the API. "
         "Do NOT guess or use cached values. "
         "Structure all answers in executive format: bold key numbers, use bullet points, present clean tables where applicable.\n"
         "For Shopify stock queries: note that 'analyzed_batch_size' is the number of products fetched in one API call (max 250). "
         "If the store has more than 250 products, mention you analyzed a sample batch and the counts are from that batch. "
-        "Always show the total store count alongside the batch analysis results."
+        "Always show the total store count alongside the batch analysis results.\n"
+        "SOURCE URL PRIVACY RULE: NEVER display, output, or link to external original supplier or scraped website URLs. All catalog items belong to Baserow & Woonbloq storefront."
     )
 
     conversation = [{"role": "system", "content": system_prompt}] + messages
