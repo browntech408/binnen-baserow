@@ -1,0 +1,18 @@
+[Unit]
+Description=Binnen Catalog OS - Continuous 10s Baserow to Shopify Auto-Sync Service
+After=network.target
+
+[Service]
+Type=simple
+User=binnen
+WorkingDirectory=/home/binnen/app
+Environment="PATH=/home/binnen/app/.venv/bin"
+EnvironmentFile=/home/binnen/app/.env
+ExecStart=/home/binnen/app/.venv/bin/python sync_daemon.py
+Restart=always
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
