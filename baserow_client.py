@@ -28,20 +28,29 @@ class BaserowClient:
         size: int = 200,
         filters: dict[str, Any] | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """Yield all rows from a table (handles pagination)."""
+        """Yield all rows from a table (handles pagination and network retries)."""
+        import time
         page = 1
         while True:
             params: dict[str, Any] = {"page": page, "size": size}
             if filters:
                 params.update(filters)
 
-            response = self.session.get(
-                self._url(f"/database/rows/table/{table_id}/"),
-                params=params,
-                timeout=60,
-            )
-            response.raise_for_status()
-            payload = response.json()
+            payload = None
+            for attempt in range(4):
+                try:
+                    response = self.session.get(
+                        self._url(f"/database/rows/table/{table_id}/"),
+                        params=params,
+                        timeout=60,
+                    )
+                    response.raise_for_status()
+                    payload = response.json()
+                    break
+                except Exception as exc:
+                    if attempt == 3:
+                        raise
+                    time.sleep(2 ** attempt)
 
             for row in payload.get("results", []):
                 yield row
@@ -51,12 +60,19 @@ class BaserowClient:
             page += 1
 
     def get_row(self, table_id: int, row_id: int) -> dict[str, Any]:
-        response = self.session.get(
-            self._url(f"/database/rows/table/{table_id}/{row_id}/"),
-            timeout=60,
-        )
-        response.raise_for_status()
-        return response.json()
+        import time
+        for attempt in range(4):
+            try:
+                response = self.session.get(
+                    self._url(f"/database/rows/table/{table_id}/{row_id}/"),
+                    timeout=60,
+                )
+                response.raise_for_status()
+                return response.json()
+            except Exception:
+                if attempt == 3:
+                    raise
+                time.sleep(2 ** attempt)
 
     def create_row(
         self, table_id: int, fields: dict[str, Any]
@@ -72,13 +88,20 @@ class BaserowClient:
     def update_row(
         self, table_id: int, row_id: int, fields: dict[str, Any]
     ) -> dict[str, Any]:
-        response = self.session.patch(
-            self._url(f"/database/rows/table/{table_id}/{row_id}/"),
-            json=fields,
-            timeout=60,
-        )
-        response.raise_for_status()
-        return response.json()
+        import time
+        for attempt in range(4):
+            try:
+                response = self.session.patch(
+                    self._url(f"/database/rows/table/{table_id}/{row_id}/"),
+                    json=fields,
+                    timeout=60,
+                )
+                response.raise_for_status()
+                return response.json()
+            except Exception:
+                if attempt == 3:
+                    raise
+                time.sleep(2 ** attempt)
 
     def upload_file(self, path: str, *, timeout: float = 120) -> str:
         """Upload a local file into Baserow user storage."""
