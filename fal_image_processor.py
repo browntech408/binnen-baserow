@@ -4,10 +4,35 @@ import json
 import requests
 from PIL import Image
 
-FAL_KEY = os.getenv("FAL_KEY", "").strip()
+FAL_KEY = os.getenv("FAL_KEY", "").strip().strip('"').strip("'")
 
 DETAIL_CANVAS_W = 1760
 DETAIL_CANVAS_H = 1100
+
+
+def _ensure_detail_canvas(img: Image.Image) -> Image.Image:
+    """
+    Force exact DETAIL_CANVAS_W x DETAIL_CANVAS_H.
+    fal often returns 1760x1088 (16:10-ish); pad with pure white — never stretch.
+    """
+    img = img.convert("RGB")
+    w, h = img.size
+    if (w, h) == (DETAIL_CANVAS_W, DETAIL_CANVAS_H):
+        return img
+
+    # Fit inside canvas preserving aspect, then center on white
+    scale = min(DETAIL_CANVAS_W / w, DETAIL_CANVAS_H / h)
+    new_w = max(1, int(round(w * scale)))
+    new_h = max(1, int(round(h * scale)))
+    if (new_w, new_h) != (w, h):
+        img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+    canvas = Image.new("RGB", (DETAIL_CANVAS_W, DETAIL_CANVAS_H), (255, 255, 255))
+    paste_x = (DETAIL_CANVAS_W - new_w) // 2
+    paste_y = (DETAIL_CANVAS_H - new_h) // 2
+    canvas.paste(img, (paste_x, paste_y))
+    return canvas
+
 
 def fal_call(endpoint: str, payload: dict) -> dict:
     if not FAL_KEY:
@@ -212,18 +237,27 @@ _DETAIL_CATEGORY_EXAMPLES = (
     "- Lighting -> fixture material/finish close-up, switch/hardware detail\n"
 )
 
-# Appended to every detail fal prompt — forbids full-product re-render + identity lock.
+# Appended to every detail fal prompt — match previous-dev catalog quality.
 _DETAIL_FAL_PROMPT_SUFFIX = (
-    f"EXTREME CLOSE-UP / MACRO only — isolate this ONE physical feature filling most of the frame. "
-    f"This must visually read as zoomed-in from a different part of the SAME product — "
-    f"NOT a full product shot, NOT a packshot, NOT a different product. "
-    f"Do NOT invent parts, materials, or hardware that are not on this product "
-    f"(e.g. no office-chair star base, no unrelated metal pedestal). "
-    f"Feature perfectly centered. Seamless pure white (#FFFFFF) studio background. "
-    f"Soft diffuse commercial catalog lighting, ultra-sharp macro focus, crisp material texture, "
-    f"exact same materials/colors as the reference and product description. "
-    f"Native {DETAIL_CANVAS_W}x{DETAIL_CANVAS_H} landscape composition."
+    f"Professional high-end furniture CATALOG DETAIL / construction photograph "
+    f"(same quality bar as premium brand galleries). "
+    f"Medium-to-extreme close-up of the named feature — the feature dominates the frame. "
+    f"Adjacent related parts may stay visible if they show real joinery/material meeting "
+    f"(e.g. seat corner + leg, tabletop edge + grain). "
+    f"Do NOT pull back into a distant full-product packshot. "
+    f"Match EXACT materials, colors, finishes, and hardware from the reference photos. "
+    f"Never invent parts from other furniture. "
+    f"Seamless pure white (#FFFFFF) studio infinity background, no props, no text, no logos. "
+    f"Soft diffuse commercial catalog lighting, ultra-sharp tactile texture, shallow DOF OK. "
+    f"Native landscape {DETAIL_CANVAS_W}x{DETAIL_CANVAS_H}."
 )
+
+# Soft-crop gate: only attach a crop hint when source + region are large enough.
+_MIN_SOURCE_EDGE_PX = 500
+_MIN_CROP_EDGE_PX = 180
+_MIN_CROP_AREA_FRAC = 0.04
+_MAX_CROP_AREA_FRAC = 0.50
+
 
 
 def _clean_product_title(product_name: str) -> str:
@@ -300,42 +334,34 @@ def identify_detail_feature_regions(
     title = _clean_product_title(product_name)
 
     sys_prompt = (
-        f"You are an expert commercial product photographer for high-end furniture & home products.\n"
+        f"You are an expert commercial product photographer for high-end furniture catalogs.\n"
         f"You are given {len(urls_list)} reference image(s) of ONE product.\n\n"
         f"{identity}\n\n"
-        "DEFINITION OF A DETAIL IMAGE:\n"
-        "A detail image is NOT a full product shot. It is a close-up, zoomed-in image that isolates\n"
-        "ONE specific physical feature of the product to show craftsmanship, material, and build quality.\n"
-        "It must visually read as \"zoomed in from a different part of the same object\" —\n"
-        "not the whole product re-rendered.\n\n"
-        "CRITICAL — USE TITLE + DESCRIPTION:\n"
-        f"  - Read the product title \"{title}\" and description carefully BEFORE choosing features.\n"
-        "  - Only select features that physically exist on THIS product type (e.g. a voetenbank/ottoman\n"
-        "    footstool may have upholstery texture, wood/metal legs that match the photos, piping —\n"
-        "    but MUST NOT invent an office-chair star pedestal, swivel base, or unrelated hardware).\n"
-        "  - If title/description conflict with a generic furniture stereotype, TRUST title + description + photos.\n\n"
-        f"TASK: Identify exactly {num_features} DISTINCT feature regions from this checklist\n"
-        "(only those physically present on THIS product):\n"
+        "GOAL: Plan 1–3 PROFESSIONAL DETAIL close-ups (like premium e-commerce galleries).\n"
+        "A detail image zooms into ONE craftsmanship feature — material, seam, joinery, edge,\n"
+        "leg/base, or hardware — on a pure white studio background. NOT a full packshot.\n\n"
+        "IMPORTANT: Generation will use FULL product photos as the primary AI reference.\n"
+        "Your job is to choose WHAT to show and describe it precisely — crops are optional hints only.\n\n"
+        "CRITICAL — LOCK IDENTITY FROM TITLE + PHOTOS:\n"
+        f"  - Product \"{title}\" only; never invent unrelated bases/hardware.\n"
+        "  - Name REAL colors/materials visible in photos (e.g. walnut wood + beige bouclé).\n"
+        "  - Prefer junctions where materials meet (fabric+frame, wood edge, stitching).\n\n"
+        f"TASK: Identify exactly {num_features} DISTINCT features from:\n"
         f"{checklist_text}\n\n"
         f"{_DETAIL_CATEGORY_EXAMPLES}\n"
-        "RULES FOR EACH FEATURE:\n"
-        f"  1. Choose the best reference image index (0 to {len(urls_list) - 1}) where that feature is sharpest.\n"
-        "  2. Provide a TIGHT normalized bounding box [ymin, xmin, ymax, xmax] (0.0–1.0) framing ONLY that feature.\n"
-        "  3. Write a fal.ai generation prompt that ALWAYS starts with the product title and a short\n"
-        "     description summary, then describes the ONE feature close-up. The prompt MUST say:\n"
-        f"       - Product: \"{title}\" (exact product — do not change identity)\n"
-        "       - extreme close-up / macro of this ONE feature only\n"
-        "       - NOT a full product shot / NOT a packshot / NOT parts from another product\n"
-        "       - materials/colors matching title, description, and the reference crop\n"
-        "       - feature centered; pure white studio background; sharp material texture\n"
-        f"       - native {DETAIL_CANVAS_W}x{DETAIL_CANVAS_H} landscape\n"
-        "  4. STRICT FIDELITY: Do NOT invent features. Only what is visible in the references AND\n"
-        "     consistent with the product title/description.\n"
-        "  5. Each feature MUST target a completely different physical section of the product.\n"
-        "  6. Set feature_type to one of: material_texture | joinery_construction | base_feet_legs |\n"
-        "     edge_corner | functional_hardware | surface_finish\n\n"
-        "Return ONLY a JSON object with key 'detail_features' = array of objects with keys:\n"
-        "feature_name, feature_type, best_image_index, crop_box_normalized, detail_prompt."
+        "For EACH feature return:\n"
+        f"  1. best_image_index (0..{len(urls_list) - 1}) — sharpest photo for this feature\n"
+        "  2. materials_colors — short string naming exact materials + colors to lock\n"
+        "  3. detail_prompt — vivid fal prompt: product title, the ONE feature, extreme close-up,\n"
+        "     materials/colors, white studio BG, NOT packshot\n"
+        "  4. crop_box_normalized — OPTIONAL hint [ymin,xmin,ymax,xmax] 0–1 if the feature\n"
+        "     region is clearly visible; otherwise null\n"
+        "  5. crop_confidence — number 0–1 (how usable that crop would be). Use <0.5 if unsure\n"
+        "     or if the source looks small/soft.\n"
+        "  6. feature_type — material_texture | joinery_construction | base_feet_legs |\n"
+        "     edge_corner | functional_hardware | surface_finish\n"
+        "  7. feature_name — short label\n\n"
+        "Return ONLY JSON: {\"detail_features\": [ ... ]}"
     )
 
     content: list[dict] = [{"type": "text", "text": sys_prompt}]
@@ -368,7 +394,7 @@ def _crop_and_prepare_region(img_url: str, crop_box: list[float]) -> str:
     """
     Downloads image, tightly crops to normalized [ymin, xmin, ymax, xmax]
     with a small safety margin, white-fills transparency, returns JPEG data URL.
-    Used as fal reference so generation starts from a true close-up, not a full packshot.
+    Used only as an OPTIONAL soft hint — primary fal refs are full product URLs.
     """
     resp = requests.get(img_url, timeout=60)
     resp.raise_for_status()
@@ -376,14 +402,27 @@ def _crop_and_prepare_region(img_url: str, crop_box: list[float]) -> str:
     w, h = orig.size
 
     ymin, xmin, ymax, xmax = crop_box
-    # Small context margin only — keep it a tight close-up
-    pad_y = (ymax - ymin) * 0.05
-    pad_x = (xmax - xmin) * 0.05
+    # Tiny context only — keep fal reference a true macro crop (existing catalog style)
+    pad_y = (ymax - ymin) * 0.03
+    pad_x = (xmax - xmin) * 0.03
 
     ymin = max(0.0, ymin - pad_y)
     xmin = max(0.0, xmin - pad_x)
     ymax = min(1.0, ymax + pad_y)
     xmax = min(1.0, xmax + pad_x)
+
+    # Guard: if Vision returned a near-full-frame box, shrink toward center for macro
+    box_h = ymax - ymin
+    box_w = xmax - xmin
+    if box_h > 0.55 or box_w > 0.55:
+        cy = (ymin + ymax) / 2.0
+        cx = (xmin + xmax) / 2.0
+        half_h = min(box_h, 0.38) / 2.0
+        half_w = min(box_w, 0.38) / 2.0
+        ymin = max(0.0, cy - half_h)
+        ymax = min(1.0, cy + half_h)
+        xmin = max(0.0, cx - half_w)
+        xmax = min(1.0, cx + half_w)
 
     box = (int(xmin * w), int(ymin * h), int(xmax * w), int(ymax * h))
     # Guard against degenerate boxes
@@ -405,6 +444,57 @@ def _crop_and_prepare_region(img_url: str, crop_box: list[float]) -> str:
     return f"data:image/jpeg;base64,{b64}"
 
 
+def _probe_image_size(img_url: str) -> tuple[int, int] | None:
+    try:
+        resp = requests.get(img_url, timeout=45)
+        resp.raise_for_status()
+        im = Image.open(io.BytesIO(resp.content))
+        return im.size
+    except Exception:
+        return None
+
+
+def _soft_crop_is_usable(
+    img_url: str,
+    crop_box: list | None,
+    crop_confidence: float | None,
+) -> tuple[bool, str]:
+    """
+    Full-image-first rule: only use a crop as a SOFT secondary hint when
+    source + region are large/sharp enough. Never rely on crop alone.
+    """
+    if not crop_box or not isinstance(crop_box, (list, tuple)) or len(crop_box) != 4:
+        return False, "no_crop_box"
+    try:
+        conf = float(crop_confidence) if crop_confidence is not None else 0.6
+    except (TypeError, ValueError):
+        conf = 0.6
+    if conf < 0.55:
+        return False, "low_confidence=%.2f" % conf
+
+    ymin, xmin, ymax, xmax = [float(x) for x in crop_box]
+    if not (0.0 <= xmin < xmax <= 1.0 and 0.0 <= ymin < ymax <= 1.0):
+        return False, "invalid_box"
+    area = (ymax - ymin) * (xmax - xmin)
+    if area < _MIN_CROP_AREA_FRAC:
+        return False, "crop_too_small_area"
+    if area > _MAX_CROP_AREA_FRAC:
+        return False, "crop_too_large_area"
+
+    size = _probe_image_size(img_url)
+    if not size:
+        return False, "source_unreadable"
+    w, h = size
+    if min(w, h) < _MIN_SOURCE_EDGE_PX:
+        return False, "source_too_small_%dx%d" % (w, h)
+
+    crop_w = int((xmax - xmin) * w)
+    crop_h = int((ymax - ymin) * h)
+    if crop_w < _MIN_CROP_EDGE_PX or crop_h < _MIN_CROP_EDGE_PX:
+        return False, "crop_px_too_small_%dx%d" % (crop_w, crop_h)
+    return True, "ok_%dx%d_from_%dx%d" % (crop_w, crop_h, w, h)
+
+
 def _build_detail_closeup_prompt(
     product_name: str,
     product_description: str,
@@ -412,25 +502,30 @@ def _build_detail_closeup_prompt(
     feature_type: str,
     raw_prompt: str,
     product_category_hint: str = "",
+    materials_colors: str = "",
 ) -> str:
     """Always lead fal prompts with product TITLE + DESCRIPTION for identity lock."""
     title = _clean_product_title(product_name)
     desc = _truncate_description(product_description, max_len=320)
     cat = (product_category_hint or "").strip()
+    mats = " ".join((materials_colors or "").split())
 
     identity = f'Product title: "{title}".'
     if cat:
         identity += f" Product type/category: {cat}."
     if desc:
         identity += f" Product description: {desc}."
+    if mats:
+        identity += f" Exact materials/colors to lock: {mats}."
 
     base = (raw_prompt or "").strip().rstrip(".")
-    # Avoid duplicating a weak feature-only prompt without title
     if not base or title.lower() not in base.lower():
         feature_bit = (
             f"Extreme macro close-up of \"{feature_name}\" ({feature_type}) "
             f"on product \"{title}\", isolating only this feature from the same object"
         )
+        if mats:
+            feature_bit += f", showing {mats}"
         if base:
             base = f"{feature_bit}. {base}"
         else:
@@ -439,7 +534,7 @@ def _build_detail_closeup_prompt(
     return (
         f"{identity} "
         f"{base}. "
-        f"Stay faithful to title + description + reference images only. "
+        f"Stay faithful to title + description + reference photos only. "
         f"{_DETAIL_FAL_PROMPT_SUFFIX}"
     )
 
@@ -467,6 +562,8 @@ def _fallback_detail_features(
             "feature_type": "material_texture",
             "best_image_index": 0,
             "crop_box_normalized": [0.28, 0.28, 0.72, 0.72],
+            "crop_confidence": 0.35,
+            "materials_colors": "",
             "detail_prompt": (
                 f'Product "{title}": extreme macro of the actual upholstery or surface material '
                 f"visible on this product only — weave/grain/texture, not the full product"
@@ -477,6 +574,8 @@ def _fallback_detail_features(
             "feature_type": "edge_corner",
             "best_image_index": 0,
             "crop_box_normalized": [0.15, 0.15, 0.55, 0.55],
+            "crop_confidence": 0.35,
+            "materials_colors": "",
             "detail_prompt": (
                 f'Product "{title}": extreme close-up of an edge, corner, piping or trim '
                 f"that exists on this product — not parts from another furniture type"
@@ -493,6 +592,8 @@ def _fallback_detail_features(
                 "feature_type": "base_feet_legs",
                 "best_image_index": 0,
                 "crop_box_normalized": [0.60, 0.20, 1.0, 0.80],
+                "crop_confidence": 0.35,
+                "materials_colors": "",
                 "detail_prompt": (
                     f'Product "{title}": extreme close-up of the ACTUAL legs or feet of this '
                     f"product as in the reference photos only. Do not invent office-chair "
@@ -507,6 +608,8 @@ def _fallback_detail_features(
                 "feature_type": "surface_finish",
                 "best_image_index": 0,
                 "crop_box_normalized": [0.30, 0.20, 0.70, 0.60],
+                "crop_confidence": 0.35,
+                "materials_colors": "",
                 "detail_prompt": (
                     f'Product "{title}": extreme close-up of surface finish/sheen/grain '
                     f"matching this product only"
@@ -572,7 +675,7 @@ def _collect_ref_pool(
 
 
 def _download_fal_image(gen_meta: dict, request_id: str) -> Image.Image:
-    """Download fal output as-is — never PIL.resize to force canvas size."""
+    """Download fal output and pad/fit to exact DETAIL_CANVAS (white, no stretch)."""
     gen_url = gen_meta["url"]
     reported_w = gen_meta.get("width")
     reported_h = gen_meta.get("height")
@@ -582,14 +685,16 @@ def _download_fal_image(gen_meta: dict, request_id: str) -> Image.Image:
     out_w, out_h = gen_img.size
     if (out_w, out_h) != (DETAIL_CANVAS_W, DETAIL_CANVAS_H):
         print(
-            "    [!] fal returned %dx%d (requested %dx%d); keeping fal output as-is "
-            "(no manual resize)." % (out_w, out_h, DETAIL_CANVAS_W, DETAIL_CANVAS_H)
+            "    [!] fal returned %dx%d (requested %dx%d); padding to exact canvas "
+            "(white, no stretch)." % (out_w, out_h, DETAIL_CANVAS_W, DETAIL_CANVAS_H)
         )
+        gen_img = _ensure_detail_canvas(gen_img)
     elif reported_w and reported_h and (int(reported_w), int(reported_h)) != (out_w, out_h):
         print(
-            "    [!] fal meta size %sx%s != downloaded %dx%d; keeping download as-is."
+            "    [!] fal meta size %sx%s != downloaded %dx%d; keeping download then canvas-fit."
             % (reported_w, reported_h, out_w, out_h)
         )
+        gen_img = _ensure_detail_canvas(gen_img)
     return gen_img
 
 
@@ -687,9 +792,12 @@ def _generate_detail_closeups(
     product_category_hint: str = "",
 ) -> list[tuple]:
     """
-    TRUE detail close-ups: Vision picks 2-3 feature regions from the checklist,
-    soft-crops that region as fal reference, then FLUX.2 / img2img renders a
-    macro of ONE feature only (never a full-product packshot). No output resize.
+    TRUE detail close-ups — FULL-IMAGE-FIRST hybrid:
+
+    1) Vision picks WHAT features to generate (+ optional soft crop hint).
+    2) Primary fal references are FULL product URLs (identity + materials).
+    3) Soft crop is attached ONLY when source/region quality gates pass.
+       Crop is never the sole/primary driver.
     """
     engine_l = engine.lower()
     detail_engines = {"flux2-pro", "flux2-max", "kontext", "img2img", "redux"}
@@ -698,8 +806,10 @@ def _generate_detail_closeups(
         print(f"  [!] Unknown engine; using flux2-pro for detail close-ups.")
 
     title = _clean_product_title(product_name)
+    # Cap Vision context: prefer first sharp product refs (heroes first in pool)
+    vision_urls = vision_ref_pool[:4]
     print(
-        f"  [detail-gen] DETAIL close-up mode | analyzing {len(vision_ref_pool)} ref(s) "
+        f"  [detail-gen] DETAIL hybrid (full-image-first) | analyzing {len(vision_urls)} ref(s) "
         f"for '{title}' (engine={engine_l})..."
     )
     print(
@@ -710,7 +820,7 @@ def _generate_detail_closeups(
     )
 
     features = identify_detail_feature_regions(
-        vision_ref_pool,
+        vision_urls,
         product_name,
         product_description,
         openrouter_key,
@@ -719,14 +829,14 @@ def _generate_detail_closeups(
     )
 
     if not features:
-        print("  [!] Vision could not identify feature regions. Using title/description-aware fallbacks.")
+        print("  [!] Vision could not identify features. Using title/description-aware fallbacks.")
         features = _fallback_detail_features(
             product_name, product_description, num_images, product_category_hint
         )
 
     endpoint = _FAL_ENGINE_ENDPOINTS.get(engine_l, _FAL_ENGINE_ENDPOINTS["flux2-pro"])
     results: list[tuple] = []
-    identity_ref_url = vision_ref_pool[0] if vision_ref_pool else ""
+    primary_full_url = vision_ref_pool[0] if vision_ref_pool else ""
 
     for i, feat in enumerate(features):
         feat_name = feat.get("feature_name") or feat.get("feature") or ("Feature %d" % (i + 1))
@@ -735,12 +845,24 @@ def _generate_detail_closeups(
         if not isinstance(best_idx, int) or best_idx < 0 or best_idx >= len(vision_ref_pool):
             best_idx = 0
         img_source_url = vision_ref_pool[best_idx]
+        # Prefer best feature photo as primary full ref; keep pool[0] as secondary identity
+        full_urls: list[str] = []
+        for u in (img_source_url, primary_full_url):
+            if u and u not in full_urls:
+                full_urls.append(u)
+        # Optional third distinct hero from pool
+        for u in vision_ref_pool[1:3]:
+            if u and u not in full_urls:
+                full_urls.append(u)
+                break
+
         crop_box = (
             feat.get("crop_box_normalized")
             or feat.get("bounding_box")
             or feat.get("crop_box")
-            or [0.25, 0.25, 0.75, 0.75]
         )
+        crop_conf = feat.get("crop_confidence")
+        materials_colors = str(feat.get("materials_colors") or "")
         raw_prompt = feat.get("detail_prompt") or feat.get("prompt") or ""
         prompt = _build_detail_closeup_prompt(
             product_name,
@@ -749,42 +871,58 @@ def _generate_detail_closeups(
             feat_type,
             raw_prompt,
             product_category_hint=product_category_hint,
+            materials_colors=materials_colors,
+        )
+
+        use_soft_crop, crop_reason = _soft_crop_is_usable(
+            img_source_url, crop_box if isinstance(crop_box, list) else None, crop_conf
         )
 
         print("\n  [detail-gen] Detail %d/%d: '%s' (%s)" % (i + 1, len(features), feat_name, feat_type))
         print("    Product: %s" % title)
-        print("    Source [%d]: %s..." % (best_idx, img_source_url[:75]))
-        print("    Crop Box: %s" % crop_box)
+        print("    Primary full ref [%d]: %s..." % (best_idx, img_source_url[:75]))
+        print("    Soft crop: %s (%s)" % ("YES" if use_soft_crop else "NO", crop_reason))
+        if materials_colors:
+            print("    Materials/colors: %s" % materials_colors[:120])
         print("    Prompt: %s..." % prompt[:240])
-        print("    fal image_size: %dx%d (no manual resize)" % (DETAIL_CANVAS_W, DETAIL_CANVAS_H))
+        print("    fal image_size: %dx%d (pad to exact if needed)" % (DETAIL_CANVAS_W, DETAIL_CANVAS_H))
 
         try:
-            cropped_data_uri = _crop_and_prepare_region(img_source_url, crop_box)
+            soft_crop_uri = None
+            if use_soft_crop:
+                soft_crop_uri = _crop_and_prepare_region(img_source_url, [float(x) for x in crop_box])
 
             if engine_l in ("flux2-pro", "flux2-max"):
-                # (1) feature crop for framing, (2) full product URL for identity
-                image_urls = [cropped_data_uri]
-                if identity_ref_url:
-                    image_urls.append(identity_ref_url)
+                # FULL product first — identity & materials. Soft crop only as optional hint.
+                image_urls = list(full_urls[:2])
+                if soft_crop_uri:
+                    image_urls.append(soft_crop_uri)
                 prompt_with_refs = (
                     prompt
-                    + " Reference image 1 = tight crop of the target feature. "
-                    + "Reference image 2 = full product for identity — "
-                    + "match materials/colors from this product only; "
-                    + "do not invent office-chair bases or parts from other furniture."
+                    + " Reference image 1 (and 2 if present) = FULL product photo(s) — "
+                    + "lock exact identity, materials, and colors from these. "
+                    + "Zoom INTO the named feature as an extreme close-up; "
+                    + "do NOT reproduce a full-product packshot. "
                 )
+                if soft_crop_uri:
+                    prompt_with_refs += (
+                        "The last reference is an OPTIONAL soft region hint for WHERE "
+                        "to zoom — keep framing as a tight macro of that feature, "
+                        "but materials/colors must still match the full product photos."
+                    )
                 payload = {
                     "prompt": prompt_with_refs,
-                    "image_urls": image_urls[:2],
+                    "image_urls": image_urls[:3],
                     "image_size": {"width": DETAIL_CANVAS_W, "height": DETAIL_CANVAS_H},
                     "output_format": "jpeg",
                     "safety_tolerance": "2",
                     "enable_safety_checker": True,
                 }
             elif engine_l == "kontext":
+                # Kontext: full product URL primary
                 payload = {
                     "prompt": prompt,
-                    "image_url": cropped_data_uri,
+                    "image_url": full_urls[0],
                     "image_size": {"width": DETAIL_CANVAS_W, "height": DETAIL_CANVAS_H},
                     "aspect_ratio": "16:10",
                     "output_format": "jpeg",
@@ -792,9 +930,10 @@ def _generate_detail_closeups(
                     "safety_tolerance": "2",
                 }
             else:
+                # img2img / redux: full URL primary (not crop)
                 payload = {
                     "prompt": prompt,
-                    "image_url": cropped_data_uri,
+                    "image_url": soft_crop_uri or full_urls[0],
                     "image_size": {"width": DETAIL_CANVAS_W, "height": DETAIL_CANVAS_H},
                     "num_inference_steps": 40,
                     "num_images": 1,
@@ -805,7 +944,8 @@ def _generate_detail_closeups(
                 if engine_l == "redux":
                     payload["guidance_scale"] = 3.5
                 else:
-                    payload["strength"] = strength
+                    # Slightly higher strength when using full image so model can reframe to macro
+                    payload["strength"] = max(strength, 0.45) if not soft_crop_uri else strength
                     payload["guidance_scale"] = 7.5
 
             data, request_id = _fal_post(endpoint, payload, fal_key)
@@ -813,7 +953,8 @@ def _generate_detail_closeups(
             results.append((gen_img, request_id, prompt))
             print(
                 f"    [OK] Detail close-up via {engine_l} "
-                f"(size={gen_img.size[0]}x{gen_img.size[1]}, request_id={request_id})"
+                f"(size={gen_img.size[0]}x{gen_img.size[1]}, request_id={request_id}, "
+                f"soft_crop={use_soft_crop})"
             )
         except Exception as exc:
             print(f"  [!] Error generating detail close-up {i + 1}: {exc}")
@@ -840,13 +981,14 @@ def generate_detail_images(
     Modes:
       detail (default): TRUE close-ups of 2-3 distinct physical features
         (material, joinery, base, edge, hardware, finish). NOT full product.
-        Uses Vision feature regions + FLUX.2 Pro edit (or img2img/redux).
+        FULL-IMAGE-FIRST hybrid: Vision chooses features; fal uses full product
+        photos as primary refs; soft crop is optional quality-gated hint only.
       macro: alias for detail
       packshot: full product centered white-BG shot (optional; not a detail image)
 
-    No manual PIL resize of fal output — size comes from image_size 1760x1100.
+    Output is forced to exact 1760x1100 (white pad if fal returns 1760x1088).
     """
-    fal_key_local = os.getenv("FAL_KEY", "").strip() or FAL_KEY
+    fal_key_local = (os.getenv("FAL_KEY", "").strip().strip('"').strip("'") or FAL_KEY)
     if not fal_key_local:
         raise ValueError("FAL_KEY is not set.")
 
