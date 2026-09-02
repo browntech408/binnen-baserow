@@ -7,8 +7,10 @@ import math
 import hmac
 import hashlib
 import time
+import base64
 from pathlib import Path
 from typing import Any
+import requests
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +22,8 @@ from baserow_client import BaserowClient
 from config import load_settings
 from shopify_client import ShopifyClient, load_shopify_config
 from dashboard.agent import run_agent_chat, execute_tool
+from dashboard.playground_assets import get_playground_product_assets, search_products_for_playground
+from dashboard.fal_eval import get_catalog, eval_image_method, ensure_public_image_url
 
 app = FastAPI(title="Binnen Enterprise AI Catalog Suite")
 
@@ -161,18 +165,33 @@ class AIDescPlaygroundRequest(BaseModel):
 
 
 class AIImagePlaygroundRequest(BaseModel):
-    task_type: str = "outpaint"  # 'outpaint', 'rembg', 'lifestyle', 'detail'
+    task_type: str = "outpaint"  # 'outpaint', 'rembg', 'detail'
     image_url: str
-    models: list[str] = ["fal_bria_expand", "smart_canvas_pad"]
+    models: list[str] = ["fal-ai/bria/expand"]
     prompt: str = ""
     outpaint_percent: str = "15%"
     aspect_ratio: str = "4:3"
+
+
+class PlaygroundImageUploadRequest(BaseModel):
+    image_data: str  # data: URI from browser FileReader
+
+
+class ProductEditRequest(BaseModel):
+    """Partial update payload for editing a product row in Baserow."""
+    name: str | None = None
+    description: str | None = None
+    ai_description_nl: str | None = None
+    status: str | None = None
 
 
 # ==============================================================================
 # AUTH & PAGE SERVING ROUTES
 # ==============================================================================
 @app.get("/")
+@app.get("/catalog")
+@app.get("/products")
+@app.get("/playground")
 async def serve_index(request: Request):
     """Serve main catalog dashboard if authenticated, else redirect to login."""
     token = request.cookies.get(SESSION_COOKIE_NAME)
@@ -259,7 +278,7 @@ async def get_system_status():
             },
             "baserow": {
                 "name": "Baserow Master Catalog",
-                "configured": bool(settings.api_token),
+                "configured": bool(settings.baserow_token),
                 "url": settings.api_base,
                 "status": "Connected",
             },
@@ -438,10 +457,55 @@ async def get_single_product(row_id: int):
     try:
         settings = load_settings()
         client = BaserowClient(settings)
-        row = client.get_row(settings.products_table_id, row_id)
-        return {"ok": True, "product": row}
+        resp = client.session.get(
+            f"{settings.api_base}/database/rows/table/{settings.products_table_id}/{row_id}/",
+            params={"user_field_names": "true"},
+            timeout=30,
+        )
+        if not resp.ok:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        return {"ok": True, "product": resp.json()}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Product row not found: {e}")
+
+
+@app.patch("/api/product/{row_id}", dependencies=[Depends(require_auth)])
+async def update_product(row_id: int, req: ProductEditRequest):
+    """Partial update of a product row in Baserow Table 742."""
+    try:
+        settings = load_settings()
+        client = BaserowClient(settings)
+
+        payload: dict[str, Any] = {}
+        if req.name is not None:
+            payload[settings.field_product_name] = req.name
+        if req.description is not None:
+            payload[settings.field_product_description] = req.description
+        if req.ai_description_nl is not None:
+            payload[settings.field_ai_description_nl] = req.ai_description_nl
+        if req.status is not None:
+            payload[settings.field_product_status] = req.status
+
+        if not payload:
+            raise HTTPException(status_code=400, detail="No fields provided to update.")
+
+        resp = client.session.patch(
+            f"{settings.api_base}/database/rows/table/{settings.products_table_id}/{row_id}/?user_field_names=false",
+            json=payload,
+            timeout=20,
+        )
+        if not resp.ok:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+
+        return {"ok": True, "row_id": row_id, "updated": payload}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 
 @app.post("/api/sync/product", dependencies=[Depends(require_auth)])
@@ -506,6 +570,38 @@ async def handle_confirm_action(req: ConfirmActionRequest):
 # ==============================================================================
 # PLAYGROUND & MULTI-MODEL BENCHMARK EVALUATION ENGINE
 # ==============================================================================
+@app.get("/api/playground/catalog", dependencies=[Depends(require_auth)])
+async def get_playground_catalog(refresh: bool = False):
+    """Return fal.ai model catalog grouped by evaluation task (live from fal API)."""
+    fal_key = os.getenv("FAL_KEY", "").strip().strip('"')
+    catalog = get_catalog(fal_key=fal_key, force=refresh)
+    catalog["fal_configured"] = bool(fal_key)
+    return catalog
+
+
+@app.get("/api/playground/products", dependencies=[Depends(require_auth)])
+async def playground_search_products(
+    search: str = "",
+    filter_type: str = "all",
+    page: int = 1,
+    size: int = 20,
+):
+    """Search catalog products that have images for the eval playground."""
+    try:
+        return search_products_for_playground(search=search, filter_type=filter_type, page=page, size=size)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/playground/products/{row_id}/assets", dependencies=[Depends(require_auth)])
+async def playground_product_assets(row_id: int, include_shopify: bool = True):
+    """Return merged Baserow + Shopify image assets for one product."""
+    try:
+        return get_playground_product_assets(row_id, include_shopify=include_shopify)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @app.get("/api/playground/presets", dependencies=[Depends(require_auth)])
 async def get_playground_presets():
     """Fetch high-quality curated sample products for instant 1-click playground testing."""
@@ -667,8 +763,62 @@ def _call_openrouter_model(
         }
 
 
+@app.post("/api/playground/upload-image", dependencies=[Depends(require_auth)])
+async def upload_playground_image(req: PlaygroundImageUploadRequest):
+    """Upload a local image (data URI) to fal CDN and return a public URL."""
+    fal_key = os.getenv("FAL_KEY", "").strip().strip('"')
+    if not fal_key:
+        raise HTTPException(status_code=400, detail="FAL_KEY not configured in .env")
+    if not req.image_data or not req.image_data.startswith("data:"):
+        raise HTTPException(status_code=400, detail="Expected a data:image/... URI from file upload")
+    try:
+        url = ensure_public_image_url(req.image_data, fal_key)
+        return {"ok": True, "url": url}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/playground/eval/image", dependencies=[Depends(require_auth)])
+async def eval_image_models(req: AIImagePlaygroundRequest):
+    """Run concurrent fal.ai model evaluation — compare cost, speed, and quality."""
+    if not req.image_url:
+        raise HTTPException(status_code=400, detail="Missing input image URL")
+
+    fal_key = os.getenv("FAL_KEY", "").strip().strip('"')
+    import concurrent.futures
+
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(req.models), 4)) as executor:
+        futures = [
+            executor.submit(
+                eval_image_method,
+                m,
+                req.task_type,
+                req.image_url,
+                req.prompt,
+                req.outpaint_percent,
+                req.aspect_ratio,
+                fal_key,
+            )
+            for m in req.models
+        ]
+        for future in concurrent.futures.as_completed(futures):
+            results.append(future.result())
+
+    results.sort(key=lambda x: (-x.get("score", 0), x.get("cost_usd", 999), x.get("latency_sec", 999)))
+
+    return {
+        "ok": True,
+        "task_type": req.task_type,
+        "input_image_url": req.image_url,
+        "methods_evaluated": len(results),
+        "results": results,
+    }
+
+
+# Legacy text eval kept for API compatibility but not exposed in playground UI
 @app.post("/api/playground/eval/text", dependencies=[Depends(require_auth)])
-async def eval_text_models(req: AIDescPlaygroundRequest):
+async def eval_text_models_legacy(req: AIDescPlaygroundRequest):
     """Run concurrent benchmark evaluation across multiple OpenRouter models."""
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip().strip('"')
     if not api_key:
@@ -701,196 +851,6 @@ async def eval_text_models(req: AIDescPlaygroundRequest):
         "ok": True,
         "task_type": req.task_type,
         "models_evaluated": len(results),
-        "results": results,
-    }
-
-
-def _eval_image_method(
-    method_id: str,
-    task_type: str,
-    image_url: str,
-    prompt: str,
-    outpaint_percent: str,
-    aspect_ratio: str,
-) -> dict[str, Any]:
-    """Execute single image evaluation pipeline (Fal.ai, Vision FLUX, or Smart Pad)."""
-    t0 = time.perf_counter()
-    fal_key = os.getenv("FAL_KEY", "").strip().strip('"')
-
-    # Profile specs
-    METHOD_META = {
-        "fal_bria_expand": {
-            "name": "Fal.ai Bria Outpaint & Expand",
-            "provider": "fal.ai",
-            "cost_per_run": 0.0018,
-            "expected_quality": "High-Fidelity AI Outpaint",
-            "badge": "Best AI Quality",
-        },
-        "smart_canvas_pad": {
-            "name": "Smart Algorithmic Canvas Padding",
-            "provider": "Pillow / Local Core",
-            "cost_per_run": 0.0000,
-            "expected_quality": "Zero-Distortion Aspect Fitting",
-            "badge": "100% Free & Zero Latency",
-        },
-        "fal_rembg": {
-            "name": "Fal.ai RMBG v1.4 Product Cutout",
-            "provider": "fal.ai",
-            "cost_per_run": 0.0010,
-            "expected_quality": "Sub-pixel Alpha Masking",
-            "badge": "Fastest & Cleanest Cut",
-        },
-        "fal_bria_rembg": {
-            "name": "Fal.ai Bria RMBG 2.0 Studio",
-            "provider": "fal.ai",
-            "cost_per_run": 0.0015,
-            "expected_quality": "High Dynamic Range Masking",
-            "badge": "Studio Quality",
-        },
-        "fal_flux_dev": {
-            "name": "FLUX.1 [dev] Lifestyle Staging",
-            "provider": "fal.ai",
-            "cost_per_run": 0.0250,
-            "expected_quality": "Hyper-Realistic Interior Lighting",
-            "badge": "State of the Art Quality",
-        },
-        "fal_flux_schnell": {
-            "name": "FLUX.1 [schnell] Turbo Staging",
-            "provider": "fal.ai",
-            "cost_per_run": 0.0035,
-            "expected_quality": "Ultra Fast 4-Step Lifestyle Scene",
-            "badge": "Best Value Staging",
-        },
-    }
-
-
-    meta = METHOD_META.get(method_id, {
-        "name": method_id,
-        "provider": "Custom",
-        "cost_per_run": 0.005,
-        "expected_quality": "High",
-        "badge": "Custom Method",
-    })
-
-    output_url = image_url
-    output_dimensions = "1200 x 900"
-    score = 95
-    status_note = "Evaluation Successful"
-
-    try:
-        # 1. Fal.ai Background Removal
-        if method_id == "fal_rembg" and fal_key:
-            headers = {"Authorization": f"Key {fal_key}", "Content-Type": "application/json"}
-            payload = {"image_url": image_url}
-            resp = requests.post("https://fal.run/fal-ai/imageutils/rembg", headers=headers, json=payload, timeout=40)
-            if resp.ok:
-                data = resp.json()
-                output_url = data.get("image", {}).get("url") or image_url
-                output_dimensions = "1760 x 1100 (PNG Alpha)"
-                score = 98
-            else:
-                status_note = f"Fal API notice ({resp.status_code}), using benchmark pipeline"
-
-        # 2. Fal.ai Lifestyle Staging (FLUX)
-        elif "flux" in method_id and fal_key:
-            endpoint = "fal-ai/flux/dev" if "dev" in method_id else "fal-ai/flux/schnell"
-            headers = {"Authorization": f"Key {fal_key}", "Content-Type": "application/json"}
-            payload = {
-                "prompt": prompt or "Modern minimalist Dutch living room interior with designer furniture in center, photorealistic 8k",
-                "image_size": "landscape_16_9",
-                "num_inference_steps": 28 if "dev" in method_id else 4,
-            }
-            resp = requests.post(f"https://fal.run/{endpoint}", headers=headers, json=payload, timeout=60)
-            if resp.ok:
-                data = resp.json()
-                images = data.get("images", [])
-                if images:
-                    output_url = images[0].get("url") or image_url
-                    output_dimensions = "1920 x 1080"
-                    score = 99 if "dev" in method_id else 94
-            else:
-                status_note = f"Fal FLUX notice ({resp.status_code}), using benchmark preview"
-
-        # 3. Smart Canvas Pad (Local Pillow)
-        elif method_id == "smart_canvas_pad":
-            # Zero cost, high speed pure algorithmic canvas
-            output_url = image_url
-            output_dimensions = "1760 x 1100 (White Canvas 16:10)"
-            score = 90
-
-
-        elapsed_sec = round(time.perf_counter() - t0, 3)
-        cost_per_run = meta["cost_per_run"]
-        cost_per_1k = round(cost_per_run * 1000, 2)
-
-        return {
-            "method_id": method_id,
-            "method_name": meta["name"],
-            "provider": meta["provider"],
-            "tier_badge": meta["badge"],
-            "ok": True,
-            "output_url": output_url,
-            "output_dimensions": output_dimensions,
-            "latency_sec": elapsed_sec,
-            "cost_usd": cost_per_run,
-            "cost_per_1k": cost_per_1k,
-            "score": score,
-            "status_note": status_note,
-            "recommendation": "Best Value" if cost_per_run < 0.005 else "Highest Quality",
-        }
-
-    except Exception as e:
-        elapsed_sec = round(time.perf_counter() - t0, 3)
-        return {
-            "method_id": method_id,
-            "method_name": meta["name"],
-            "provider": meta["provider"],
-            "tier_badge": meta["badge"],
-            "ok": False,
-            "error": str(e),
-            "output_url": image_url,
-            "output_dimensions": "1200 x 900",
-            "latency_sec": elapsed_sec,
-            "cost_usd": meta["cost_per_run"],
-            "cost_per_1k": round(meta["cost_per_run"] * 1000, 2),
-            "score": 0,
-            "recommendation": "Failed",
-        }
-
-
-@app.post("/api/playground/eval/image", dependencies=[Depends(require_auth)])
-async def eval_image_models(req: AIImagePlaygroundRequest):
-    """Run concurrent benchmark evaluation across multiple image models and pipelines."""
-    if not req.image_url:
-        raise HTTPException(status_code=400, detail="Missing input image URL")
-
-    import concurrent.futures
-
-    results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(req.models), 4)) as executor:
-        future_to_method = {
-            executor.submit(
-                _eval_image_method,
-                m,
-                req.task_type,
-                req.image_url,
-                req.prompt,
-                req.outpaint_percent,
-                req.aspect_ratio,
-            ): m
-            for m in req.models
-        }
-        for future in concurrent.futures.as_completed(future_to_method):
-            results.append(future.result())
-
-    # Sort results by score desc, latency asc
-    results.sort(key=lambda x: (-x.get("score", 0), x.get("cost_per_1k", 999)))
-
-    return {
-        "ok": True,
-        "task_type": req.task_type,
-        "input_image_url": req.image_url,
-        "methods_evaluated": len(results),
         "results": results,
     }
 
