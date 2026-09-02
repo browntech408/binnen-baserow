@@ -1,7 +1,8 @@
 """Delete Shopify images beyond position 2 for report-trimmed white products.
 
 Products where white_urls were reduced (3/4/5 -> 2 in the classify report) should
-only keep live Shopify images at position 1 and 2. Includes already pixelbin-done products.
+only keep live Shopify images at position 1 and 2.
+
 
   python shopify_delete_extra_images_trimmed.py --dry-run
   python shopify_delete_extra_images_trimmed.py --apply --checkpoint output/trimmed_extra_delete_checkpoint.json

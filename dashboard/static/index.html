@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Binnen Catalog OS | Enterprise Multi-Storefront Intelligence</title>
+  <title>Binnen Catalog OS | Enterprise AI Studio &amp; Multi-Storefront Intelligence</title>
   
   <!-- Immediate Auth Guard (Prevents unauthorized rendering) -->
   <script>
@@ -33,224 +33,656 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <!-- Top Command Bar Header -->
-  <header class="app-header">
-    <div class="header-brand-group">
-      <div class="brand-logo">
-        <div class="logo-shield">
-          <span class="logo-text">B</span>
-          <div class="shield-glow"></div>
-        </div>
-        <div class="brand-meta">
-          <div class="brand-name">BINNEN <span class="brand-tag">OS</span></div>
-          <div class="brand-desc">Enterprise Catalog &amp; AI Synchronization Engine</div>
-        </div>
-      </div>
 
-      <div class="store-selector-badge" title="Active Shopify Storefront">
-        <span class="store-dot"></span>
-        <span class="store-title">Woonbloq Shopify</span>
-        <span class="store-slug">ibz6u3-ss</span>
-      </div>
-    </div>
-
-    <!-- Center Quick Stat Badges -->
-    <div class="header-status-strip">
-      <div class="badge-pill live" title="Connected to Baserow Catalog">
-        <span class="pulse-indicator"></span>
-        <span class="badge-label">Baserow</span>
-        <span class="badge-val" id="hdrBaserowCount">Connecting...</span>
-      </div>
-      <div class="badge-pill shopify" title="Live Shopify Storefront Inventory">
-        <!-- Shopify bag icon -->
-        <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
-        </svg>
-        <span class="badge-label">Shopify Store</span>
-        <span class="badge-val" id="hdrShopifyCount">6,492 items</span>
-      </div>
-    </div>
-
-    <!-- Header Actions -->
-    <div class="header-actions">
-      <button id="refreshBtn" class="btn-ghost icon-btn" title="Refresh Live Data">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-        </svg>
-      </button>
-      <div class="divider-v"></div>
-      <div class="user-profile-badge">
-        <div class="avatar-circle">AD</div>
-        <div class="user-info">
-          <span class="user-name">Admin Console</span>
-          <span class="user-role">admin@admin.com</span>
-        </div>
-        <button id="logoutBtn" class="btn-logout-header" title="Sign Out" onclick="handleLogout()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-            <polyline points="16 17 21 12 16 7"></polyline>
-            <line x1="21" y1="12" x2="9" y2="12"></line>
-          </svg>
-          <span>Sign Out</span>
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <!-- App Main Screen Layout (Fixed Viewport, No Body Scroll) -->
-  <div class="app-main-layout" id="appMainLayout">
+  <!-- App Wrapper (Sidebar + Main Shell) -->
+  <div class="app-root-container">
     
-    <!-- LEFT PANE: Catalog Explorer & KPI Dashboard -->
-    <main class="catalog-pane" id="catalogPane">
+    <!-- LEFT EXPANDABLE / COLLAPSIBLE SIDEBAR -->
+    <aside class="app-sidebar" id="appSidebar">
       
-      <!-- Executive KPI Strip (3 Clean Executive Cards) -->
-      <section class="kpi-strip">
-        <div class="kpi-box" id="kpiBoxBaserow">
-          <div class="kpi-box-top">
-            <span class="kpi-title">Baserow</span>
-            <span class="kpi-badge blue">Database</span>
+      <!-- Sidebar Brand Header -->
+      <div class="sidebar-header">
+        <div class="brand-logo-group">
+          <div class="logo-shield">
+            <span class="logo-text">B</span>
+            <div class="shield-glow"></div>
           </div>
-          <div class="kpi-number" id="valBaserowProducts">—</div>
-          <div class="kpi-box-bottom">
-            <span class="text-dim">Active Brands:</span>
-            <strong id="valBaserowBrands" class="text-white">— Brands</strong>
-            <span class="kpi-status-dot"></span>
+          <div class="brand-meta sidebar-text">
+            <div class="brand-name">BINNEN <span class="brand-tag">OS</span></div>
+            <div class="brand-desc">AI Catalog Studio</div>
           </div>
         </div>
-
-        <div class="kpi-box" id="kpiBoxShopify">
-          <div class="kpi-box-top">
-            <span class="kpi-title">Shopify Woonbloq</span>
-            <span class="kpi-badge cyan">Storefront</span>
-          </div>
-          <div class="kpi-number" id="valShopifyTotal">6,492</div>
-          <div class="kpi-box-bottom">
-            <span class="status-micro green"><strong id="valShopifyActive">5,663</strong> Active</span>
-            <span class="status-micro amber"><strong id="valShopifyDraft">818</strong> Draft</span>
-            <span class="status-micro gray"><strong id="valShopifyArchived">11</strong> Arch</span>
-          </div>
-        </div>
-
-        <div class="kpi-box" id="kpiBoxSync">
-          <div class="kpi-box-top">
-            <span class="kpi-title">Sync Coverage Rate</span>
-            <span class="kpi-badge green" id="tagSyncPercent">97.9%</span>
-          </div>
-          <div class="kpi-number" id="valLinkedCount">—</div>
-          <div class="kpi-progress-bar">
-            <div class="bar-fill" id="progressBarSync" style="width: 97.9%;"></div>
-          </div>
-          <div class="kpi-box-bottom">
-            <span class="text-dim" id="valUnlinkedNotice">Checking synchronization...</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Catalog Controls Toolbar -->
-      <section class="catalog-toolbar">
-        <div class="search-wrapper">
-          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        <button id="sidebarToggleBtn" class="btn-sidebar-toggle" title="Collapse / Expand Sidebar">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="11 17 6 12 11 7"></polyline>
+            <polyline points="18 17 13 12 18 7"></polyline>
           </svg>
-          <input type="text" id="searchInput" placeholder="Search by title, brand, URL, or row ID... (Press '/' to focus)" />
-          <button id="clearSearchBtn" class="clear-input-btn" style="display: none;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-          <span class="shortcut-key">/</span>
-        </div>
-
-        <div class="toolbar-actions">
-          <div class="select-wrapper">
-            <select id="brandSelect" class="styled-select">
-              <option value="">Filter by Brand (All 36)</option>
-            </select>
-          </div>
-
-          <div class="view-mode-buttons">
-            <button id="btnTableView" class="view-btn active" title="Data Table View">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-            </button>
-            <button id="btnCardsView" class="view-btn" title="Visual Cards View">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Filter Tabs Strip -->
-      <nav class="catalog-tabs-bar">
-        <button class="nav-tab active" data-filter="all">
-          <span>All Products</span>
-          <span class="tab-pill-count" id="tabCountAll">6,481</span>
         </button>
-        <button class="nav-tab" data-filter="linked">
-          <span class="status-dot-sm green"></span>
-          <span>Synced to Woonbloq</span>
+      </div>
+
+      <!-- Navigation Section -->
+      <div class="sidebar-section-title sidebar-text">Core Workspace</div>
+      <nav class="sidebar-nav">
+        <!-- 1. Catalog & Inventory -->
+        <button class="nav-item active" id="navCatalog" data-view="catalog">
+          <span class="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+          </span>
+          <span class="nav-label sidebar-text">Products &amp; Catalog</span>
+          <span class="nav-badge sidebar-text" id="sideCatalogCount">6.4k</span>
+        </button>
+
+        <!-- 2. AI Model & Method Eval Playground (Requested Feature) -->
+        <button class="nav-item" id="navPlayground" data-view="playground">
+          <span class="nav-icon icon-glow-purple">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 2v7.31"></path>
+              <path d="M14 9.3V2"></path>
+              <path d="M8.5 2h7"></path>
+              <path d="M14 9.3a6.5 6.5 0 1 1-4 0"></path>
+              <path d="M5.52 16h12.96"></path>
+            </svg>
+          </span>
+          <span class="nav-label sidebar-text">AI Eval Playground</span>
+          <span class="nav-badge-pill green sidebar-text">Benchmark</span>
+        </button>
+
+        <!-- 3. Pipelines & Sync Automation -->
+        <button class="nav-item" id="navPipelines" data-view="pipelines">
+          <span class="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+          </span>
+          <span class="nav-label sidebar-text">Pipelines &amp; Sync</span>
+          <span class="nav-badge sidebar-text" id="sideSyncRatio">98%</span>
+        </button>
+
+        <!-- 4. Autonomous Copilot Assistant -->
+        <button class="nav-item" id="navCopilot" data-view="copilot">
+          <span class="nav-icon icon-glow-cyan">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+            </svg>
+          </span>
+          <span class="nav-label sidebar-text">Catalog AI Copilot</span>
+          <span class="nav-badge-dot green"></span>
         </button>
       </nav>
 
-      <!-- Catalog Content Scroll Area -->
-      <div class="catalog-scroll-container">
-        
-        <!-- High-Density Enterprise Table View -->
-        <div id="tableViewContainer" class="table-container">
-          <table class="enterprise-table">
-            <thead>
-              <tr>
-                <th style="width: 360px;">Product / Title</th>
-                <th style="width: 220px;">Brand &amp; Hierarchy</th>
-                <th style="width: 190px;">Shopify Sync State</th>
-                <th style="width: 120px; text-align: right;">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="productsTableBody">
-              <tr>
-                <td colspan="4" class="table-state-row">
-                  <div class="loading-spinner"></div>
-                  <span>Loading Baserow products...</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      <div class="sidebar-section-title sidebar-text">System &amp; Settings</div>
+      <nav class="sidebar-nav">
+        <!-- 5. Settings & API Engines -->
+        <button class="nav-item" id="navSettings" data-view="settings">
+          <span class="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </span>
+          <span class="nav-label sidebar-text">AI Engines &amp; APIs</span>
+          <span class="nav-badge-pill blue sidebar-text" id="sideApiState">5 Live</span>
+        </button>
+      </nav>
+
+      <!-- Sidebar Footer User Card -->
+      <div class="sidebar-footer">
+        <div class="store-badge-card sidebar-text" title="Active Shopify Storefront: Woonbloq">
+          <div class="store-badge-header">
+            <span class="store-dot"></span>
+            <span class="store-name">Woonbloq Shopify</span>
+          </div>
+          <div class="store-slug-id">ibz6u3-ss • Live Sync</div>
         </div>
 
-        <!-- Visual Product Cards Grid View -->
-        <div id="cardsViewContainer" class="cards-grid-container" style="display: none;"></div>
+        <div class="user-profile-strip">
+          <div class="avatar-circle">AD</div>
+          <div class="user-info-mini sidebar-text">
+            <span class="user-name">Admin Console</span>
+            <span class="user-role">admin@admin.com</span>
+          </div>
+          <button class="btn-sidebar-logout" title="Sign Out" onclick="handleLogout()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+          </button>
+        </div>
       </div>
 
-      <!-- Pinned Pagination Footer -->
-      <footer class="catalog-pagination-bar">
-        <div class="pagination-summary" id="paginationInfo">
-          Showing <strong>1-12</strong> of <strong>6,481</strong> products
+    </aside>
+
+    <!-- RIGHT MAIN WORKSPACE -->
+    <div class="app-workspace">
+      
+      <!-- Top Command Bar Header -->
+      <header class="app-header">
+        <div class="header-breadcrumbs">
+          <span class="crumb-root">BINNEN CATALOG OS</span>
+          <span class="crumb-separator">/</span>
+          <span class="crumb-current" id="headerBreadcrumbTitle">Catalog Explorer</span>
         </div>
 
-        <div class="pagination-nav">
-          <button id="btnPrevPage" class="nav-arrow-btn" disabled>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-            Previous
-          </button>
-          <div class="page-selector">
-            <span>Page</span>
-            <input type="number" id="pageJumpInput" min="1" value="1" />
-            <span id="totalPagesText">of 541</span>
+        <!-- Center Quick Stat Badges -->
+        <div class="header-status-strip">
+          <div class="badge-pill live" title="Connected to Baserow Catalog">
+            <span class="pulse-indicator"></span>
+            <span class="badge-label">Baserow</span>
+            <span class="badge-val" id="hdrBaserowCount">Connecting...</span>
           </div>
-          <button id="btnNextPage" class="nav-arrow-btn">
-            Next
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </button>
+          <div class="badge-pill shopify" title="Live Shopify Storefront Inventory">
+            <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
+            </svg>
+            <span class="badge-label">Shopify Store</span>
+            <span class="badge-val" id="hdrShopifyCount">6,492 items</span>
+          </div>
         </div>
 
-        <div class="page-size-selector">
-          <span class="text-dim">Per page:</span>
-          <select id="pageSizeSelect" class="styled-select-sm">
-            <option value="12" selected>12</option>
-            <option value="24">24</option>
-            <option value="48">48</option>
-          </select>
+        <!-- Header Actions -->
+        <div class="header-actions">
+          <button id="quickPlaygroundBtn" class="btn-primary-sm" title="Launch AI Model Eval Playground" onclick="switchView('playground')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 2v7.31"></path><path d="M14 9.3V2"></path><path d="M8.5 2h7"></path><path d="M14 9.3a6.5 6.5 0 1 1-4 0"></path><path d="M5.52 16h12.96"></path>
+            </svg>
+            <span>Eval Playground</span>
+          </button>
+          <button id="refreshBtn" class="btn-ghost icon-btn" title="Refresh Live Data">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </button>
         </div>
-      </footer>
-    </main>
+      </header>
+
+      <!-- VIEWPORT STACK (Switchable Single-Page Views) -->
+      <div class="app-viewport-container">
+
+        <!-- ===================================================================
+             VIEW 1: CATALOG & INVENTORY EXPLORER
+             =================================================================== -->
+        <main class="dashboard-view active" id="viewCatalog">
+          
+          <!-- Executive KPI Strip (3 Clean Executive Cards) -->
+          <section class="kpi-strip">
+            <div class="kpi-box" id="kpiBoxBaserow">
+              <div class="kpi-box-top">
+                <span class="kpi-title">Baserow Master</span>
+                <span class="kpi-badge blue">Database</span>
+              </div>
+              <div class="kpi-number" id="valBaserowProducts">—</div>
+              <div class="kpi-box-bottom">
+                <span class="text-dim">Active Brands:</span>
+                <strong id="valBaserowBrands" class="text-white">— Brands</strong>
+                <span class="kpi-status-dot"></span>
+              </div>
+            </div>
+
+            <div class="kpi-box" id="kpiBoxShopify">
+              <div class="kpi-box-top">
+                <span class="kpi-title">Shopify Woonbloq</span>
+                <span class="kpi-badge cyan">Storefront</span>
+              </div>
+              <div class="kpi-number" id="valShopifyTotal">6,492</div>
+              <div class="kpi-box-bottom">
+                <span class="status-micro green"><strong id="valShopifyActive">5,663</strong> Active</span>
+                <span class="status-micro amber"><strong id="valShopifyDraft">818</strong> Draft</span>
+                <span class="status-micro gray"><strong id="valShopifyArchived">11</strong> Arch</span>
+              </div>
+            </div>
+
+            <div class="kpi-box" id="kpiBoxSync">
+              <div class="kpi-box-top">
+                <span class="kpi-title">Sync Coverage Rate</span>
+                <span class="kpi-badge green" id="tagSyncPercent">97.9%</span>
+              </div>
+              <div class="kpi-number" id="valLinkedCount">—</div>
+              <div class="kpi-progress-bar">
+                <div class="bar-fill" id="progressBarSync" style="width: 97.9%;"></div>
+              </div>
+              <div class="kpi-box-bottom">
+                <span class="text-dim" id="valUnlinkedNotice">Checking synchronization...</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- Catalog Controls Toolbar -->
+          <section class="catalog-toolbar">
+            <div class="search-wrapper">
+              <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input type="text" id="searchInput" placeholder="Search by title, brand, URL, or row ID... (Press '/' to focus)" />
+              <button id="clearSearchBtn" class="clear-input-btn" style="display: none;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+              <span class="shortcut-key">/</span>
+            </div>
+
+            <div class="toolbar-actions">
+              <div class="select-wrapper">
+                <select id="brandSelect" class="styled-select">
+                  <option value="">Filter by Brand (All 36)</option>
+                </select>
+              </div>
+
+              <div class="view-mode-buttons">
+                <button id="btnTableView" class="view-btn active" title="Data Table View">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                </button>
+                <button id="btnCardsView" class="view-btn" title="Visual Cards View">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Filter Tabs Strip -->
+          <nav class="catalog-tabs-bar">
+            <button class="nav-tab active" data-filter="all">
+              <span>All Products</span>
+              <span class="tab-pill-count" id="tabCountAll">6,481</span>
+            </button>
+            <button class="nav-tab" data-filter="linked">
+              <span class="status-dot-sm green"></span>
+              <span>Synced to Woonbloq</span>
+            </button>
+          </nav>
+
+          <!-- Catalog Content Scroll Area -->
+          <div class="catalog-scroll-container">
+            
+            <!-- High-Density Enterprise Table View -->
+            <div id="tableViewContainer" class="table-container">
+              <table class="enterprise-table">
+                <thead>
+                  <tr>
+                    <th style="width: 360px;">Product / Title</th>
+                    <th style="width: 220px;">Brand &amp; Hierarchy</th>
+                    <th style="width: 190px;">Shopify Sync State</th>
+                    <th style="width: 120px; text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="productsTableBody">
+                  <tr>
+                    <td colspan="4" class="table-state-row">
+                      <div class="loading-spinner"></div>
+                      <span>Loading Baserow products...</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Visual Product Cards Grid View -->
+            <div id="cardsViewContainer" class="cards-grid-container" style="display: none;"></div>
+          </div>
+
+          <!-- Pinned Pagination Footer -->
+          <footer class="catalog-pagination-bar">
+            <div class="pagination-summary" id="paginationInfo">
+              Showing <strong>1-12</strong> of <strong>6,481</strong> products
+            </div>
+
+            <div class="pagination-nav">
+              <button id="btnPrevPage" class="nav-arrow-btn" disabled>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+                Previous
+              </button>
+              <div class="page-selector">
+                <span>Page</span>
+                <input type="number" id="pageJumpInput" min="1" value="1" />
+                <span id="totalPagesText">of 541</span>
+              </div>
+              <button id="btnNextPage" class="nav-arrow-btn">
+                Next
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+
+            <div class="page-size-selector">
+              <span class="text-dim">Per page:</span>
+              <select id="pageSizeSelect" class="styled-select-sm">
+                <option value="12" selected>12</option>
+                <option value="24">24</option>
+                <option value="48">48</option>
+              </select>
+            </div>
+          </footer>
+        </main>
+
+
+        <!-- ===================================================================
+             VIEW 2: AI MODEL & METHOD EVALUATION PLAYGROUND (Requested Feature)
+             =================================================================== -->
+        <main class="dashboard-view" id="viewPlayground" style="display: none;">
+          
+          <!-- Playground Hero Bar -->
+          <div class="playground-hero-bar">
+            <div class="playground-title-group">
+              <div class="playground-title-row">
+                <div class="icon-tag-lab">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10 2v7.31"></path><path d="M14 9.3V2"></path><path d="M8.5 2h7"></path><path d="M14 9.3a6.5 6.5 0 1 1-4 0"></path><path d="M5.52 16h12.96"></path>
+                  </svg>
+                </div>
+                <h2>AI Model &amp; Method Benchmark Playground</h2>
+                <span class="badge-eval-pill">Multi-Model Eval Studio</span>
+              </div>
+              <p class="playground-subtitle">
+                Compare and evaluate multiple AI models (OpenRouter, Claude, GPT-4o, Gemini, DeepSeek, Fal.ai) across cost, latency, quality, and accuracy on real catalog parameters.
+              </p>
+            </div>
+
+            <div class="playground-quick-actions">
+              <button class="btn-secondary-sm" id="btnExportBenchmark" onclick="exportBenchmarkReport()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span>Export Report (JSON)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Playground Task Type Selector Tabs -->
+          <div class="playground-task-tabs">
+            <button class="pg-tab-btn active" data-task="outpaint" onclick="switchPlaygroundTask('outpaint')">
+              <span class="pg-tab-icon">🖼️</span>
+              <span class="pg-tab-name">Image Extension &amp; Outpaint</span>
+              <span class="pg-tab-tag">Fal.ai vs Smart Pad</span>
+            </button>
+            <button class="pg-tab-btn" data-task="rembg" onclick="switchPlaygroundTask('rembg')">
+              <span class="pg-tab-icon">✂️</span>
+              <span class="pg-tab-name">Background Cutout &amp; Hero</span>
+              <span class="pg-tab-tag">Fal RMBG v1.4 vs Bria 2.0</span>
+            </button>
+
+            <button class="pg-tab-btn" data-task="lifestyle" onclick="switchPlaygroundTask('lifestyle')">
+              <span class="pg-tab-icon">🎨</span>
+              <span class="pg-tab-name">Lifestyle Scene Staging</span>
+              <span class="pg-tab-tag">FLUX.1 [dev] vs [schnell]</span>
+            </button>
+            <button class="pg-tab-btn" data-task="dutch_catalog" onclick="switchPlaygroundTask('dutch_catalog')">
+              <span class="pg-tab-icon">✍️</span>
+              <span class="pg-tab-name">Dutch Catalog &amp; LLM Rewrite</span>
+              <span class="pg-tab-tag">Claude vs GPT-4o vs Gemini</span>
+            </button>
+          </div>
+
+
+          <!-- Playground Main Dual-Pane Studio -->
+          <div class="playground-studio-grid">
+            
+            <!-- LEFT COLUMN: Configurations, Presets, Models & Parameters -->
+            <div class="pg-panel-card" id="pgConfigPanel">
+              <div class="pg-panel-header">
+                <div class="pg-panel-title">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+                  <span>Test Case &amp; Parameters</span>
+                </div>
+                <div class="pg-presets-group">
+                  <select id="pgPresetSelect" class="styled-select-sm" onchange="loadSelectedPreset(this.value)">
+                    <option value="">Load Preset Product...</option>
+                    <option value="berlijnse_stoel">Berlijnse Stoel (Rietveld)</option>
+                    <option value="bz_lattenbank">BZ Lattenbank (Visser)</option>
+                    <option value="arco_flos_lamp">Arco Floor Lamp (Flos)</option>
+                    <option value="togo_lounge_sofa">Togo Lounge Chair</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Dynamic Input Section (Switches between Image or Text based on active task) -->
+              <div class="pg-panel-body">
+                
+                <!-- IMAGE INPUT CONTROLS -->
+                <div id="pgImageInputSection" class="pg-input-section">
+                  <label class="pg-label">Source Product Image</label>
+                  <div class="pg-image-preview-dock">
+                    <img id="pgInputImageThumb" src="https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?auto=format&fit=crop&w=600&q=80" alt="Test Image" />
+                    <div class="pg-image-meta">
+                      <input type="text" id="pgImageUrlInput" class="pg-input-field font-mono" value="https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?auto=format&fit=crop&w=1200&q=80" placeholder="https://image-url.com/product.jpg" />
+                      <div class="pg-quick-sample-pills">
+                        <span class="sample-pill" onclick="setPlaygroundImage('https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?auto=format&fit=crop&w=1200&q=80')">Sample Stoel</span>
+                        <span class="sample-pill" onclick="setPlaygroundImage('https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=1200&q=80')">Sample Bank</span>
+                        <span class="sample-pill" onclick="setPlaygroundImage('https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=1200&q=80')">Sample Lamp</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Outpaint & Aspect Controls -->
+                  <div class="pg-form-row" id="pgOutpaintControls">
+                    <div class="pg-form-col">
+                      <label class="pg-label">Expansion Ratio (Outpaint Factor)</label>
+                      <select id="pgOutpaintPercent" class="pg-input-field">
+                        <option value="15%" selected>15% (Subtle Catalog Framing)</option>
+                        <option value="25%">25% (Standard E-Commerce Expand)</option>
+                        <option value="35%">35% (Wide Perspective)</option>
+                        <option value="50%">50% (Dramatic Room Expansion)</option>
+                      </select>
+                    </div>
+                    <div class="pg-form-col">
+                      <label class="pg-label">Target Canvas Aspect Ratio</label>
+                      <select id="pgAspectRatio" class="pg-input-field">
+                        <option value="16:10" selected>16:10 (1760x1100 Binnen Standard)</option>
+                        <option value="1:1">1:1 Square (1200x1200)</option>
+                        <option value="4:3">4:3 Product Ratio (1000x880)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Prompt Guidance (for lifestyle & detail) -->
+                  <div class="pg-form-group" id="pgPromptControl">
+                    <label class="pg-label">Scene &amp; Lighting Prompt (Optional Guidance)</label>
+                    <textarea id="pgPromptInput" rows="2" class="pg-input-field" placeholder="Minimalist modern Dutch architectural living room interior, warm soft morning sunlight, concrete floor, white walls..."></textarea>
+                  </div>
+                </div>
+
+                <!-- TEXT / LLM INPUT CONTROLS -->
+                <div id="pgTextInputSection" class="pg-input-section" style="display: none;">
+                  <div class="pg-form-row">
+                    <div class="pg-form-col">
+                      <label class="pg-label">Product Name / Title</label>
+                      <input type="text" id="pgTextTitleInput" class="pg-input-field" value="Berlijnse Stoel" />
+                    </div>
+                    <div class="pg-form-col">
+                      <label class="pg-label">Brand / Manufacturer</label>
+                      <input type="text" id="pgTextBrandInput" class="pg-input-field" value="Spectrum Design" />
+                    </div>
+                  </div>
+
+                  <div class="pg-form-group">
+                    <label class="pg-label">Original Scraped Raw Description (Input Context)</label>
+                    <textarea id="pgTextRawDesc" rows="3" class="pg-input-field" placeholder="Paste product raw details or supplier description..."></textarea>
+                  </div>
+
+                  <div class="pg-form-group">
+                    <label class="pg-label">Model Temperature: <strong id="valPgTemp">0.3</strong> (Low = Factual &amp; Consistent)</label>
+                    <input type="range" id="pgTempSlider" min="0.0" max="1.0" step="0.05" value="0.3" class="pg-slider" oninput="document.getElementById('valPgTemp').textContent = this.value" />
+                  </div>
+                </div>
+
+                <!-- MODEL & METHOD SELECTION CHECKBOXES -->
+                <div class="pg-model-selector-group">
+                  <div class="pg-model-header">
+                    <span class="pg-label">Select Models &amp; Methods to Evaluate Side-by-Side</span>
+                    <span class="text-dim text-xs">Choose 2 to 4 options</span>
+                  </div>
+
+                  <!-- Dynamic model list rendered by JS based on task -->
+                  <div class="pg-models-grid" id="pgModelsChecklist">
+                    <!-- Populated dynamically -->
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- Panel Footer with Trigger CTA -->
+              <div class="pg-panel-footer">
+                <button id="btnRunEval" class="btn-run-eval" onclick="executePlaygroundEval()">
+                  <div class="eval-btn-glow"></div>
+                  <span class="eval-btn-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                  </span>
+                  <span class="eval-btn-text" id="evalBtnLabel">Run Multi-Model Benchmark (3 Models)</span>
+                </button>
+              </div>
+            </div>
+
+
+            <!-- RIGHT COLUMN: Side-by-Side Benchmark Results & Leaderboard -->
+            <div class="pg-panel-card" id="pgResultsPanel">
+              <div class="pg-panel-header">
+                <div class="pg-panel-title">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"></path><path d="M12 20V4"></path><path d="M6 20v-6"></path></svg>
+                  <span>Side-by-Side Eval Matrix &amp; Results</span>
+                </div>
+                <div class="pg-eval-status-indicator" id="pgEvalStatusPill">
+                  <span class="pulse-indicator-static"></span>
+                  <span id="pgEvalStatusText">Ready to Benchmark</span>
+                </div>
+              </div>
+
+              <div class="pg-panel-body pg-results-body" id="pgResultsBody">
+                
+                <!-- Initial Empty State -->
+                <div class="pg-empty-state" id="pgEmptyState">
+                  <div class="empty-icon-orb">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                  </div>
+                  <h3>No Active Benchmark Run Yet</h3>
+                  <p>Select your task, configure models on the left, and click <strong>"Run Multi-Model Benchmark"</strong> to evaluate quality, accuracy, cost, and speed side-by-side.</p>
+                  <button class="btn-primary-sm" onclick="executePlaygroundEval()">
+                    <span>Run Default Benchmark (Berlijnse Stoel)</span>
+                  </button>
+                </div>
+
+                <!-- Live Results Comparison Grid (Populated dynamically) -->
+                <div class="pg-comparison-grid" id="pgComparisonGrid" style="display: none;"></div>
+
+                <!-- Comparative Leaderboard Table -->
+                <div class="pg-leaderboard-card" id="pgLeaderboardCard" style="display: none;">
+                  <div class="leaderboard-header">
+                    <h4>🏆 Benchmark Evaluation Leaderboard</h4>
+                    <span class="text-dim text-xs">Sorted by Highest Value &amp; ROI</span>
+                  </div>
+                  <table class="leaderboard-table">
+                    <thead>
+                      <tr>
+                        <th>Rank / Model</th>
+                        <th>Provider</th>
+                        <th>Latency</th>
+                        <th>Cost / 1K Runs</th>
+                        <th>Quality / Score</th>
+                        <th>Recommendation</th>
+                      </tr>
+                    </thead>
+                    <tbody id="pgLeaderboardBody"></tbody>
+                  </table>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </main>
+
+
+        <!-- ===================================================================
+             VIEW 3: PIPELINES & AUTOMATION ENGINE
+             =================================================================== -->
+        <main class="dashboard-view" id="viewPipelines" style="display: none;">
+          <div class="pipeline-header-bar">
+            <div>
+              <h2>Catalog Automation &amp; Pipeline Engine</h2>
+              <p class="text-dim">Monitor background sync daemons, automated AI description workers, and image enhancements.</p>
+            </div>
+          </div>
+
+          <div class="pipeline-grid">
+            <div class="pipeline-card">
+              <div class="pipe-header">
+                <div class="pipe-icon green">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                </div>
+                <div>
+                  <h4>Baserow ➔ Shopify Sync Daemon</h4>
+                  <span class="badge-status-running">Active Background Daemon</span>
+                </div>
+              </div>
+              <p class="pipe-desc">Syncs product master data, metafields, variants, prices, and tags from Baserow Table 742 to Woonbloq Shopify storefront.</p>
+              <div class="pipe-metrics">
+                <div class="pipe-m-item"><span>Synced Products:</span><strong>6,348</strong></div>
+                <div class="pipe-m-item"><span>Sync Ratio:</span><strong class="text-green">97.9%</strong></div>
+                <div class="pipe-m-item"><span>Interval:</span><strong>Real-time / On demand</strong></div>
+              </div>
+            </div>
+
+            <div class="pipeline-card">
+              <div class="pipe-header">
+                <div class="pipe-icon purple">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                <div>
+                  <h4>Dutch AI Catalog Rewriter (NL)</h4>
+                  <span class="badge-status-running">OpenRouter Powered</span>
+                </div>
+              </div>
+              <p class="pipe-desc">Generates 2-4 paragraph museum-grade Dutch product descriptions following authentic Table 742 references (Rietveld, Visser, Spectrum).</p>
+              <div class="pipe-metrics">
+                <div class="pipe-m-item"><span>Model:</span><strong>GPT-4o Mini / Claude 3.5</strong></div>
+                <div class="pipe-m-item"><span>Avg Cost / 1k:</span><strong>$0.25</strong></div>
+                <div class="pipe-m-item"><span>Target Field:</span><strong>field_7362</strong></div>
+              </div>
+            </div>
+
+            <div class="pipeline-card">
+              <div class="pipe-header">
+                <div class="pipe-icon cyan">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </div>
+                <div>
+                  <h4>fal.ai &amp; Vision Pipeline</h4>
+                  <span class="badge-status-running">Multi-Model Engine</span>
+                </div>
+              </div>
+              <p class="pipe-desc">High-speed background removal, canvas aspect ratio extension (1760x1100), and macro product detail feature crops.</p>
+              <div class="pipe-metrics">
+                <div class="pipe-m-item"><span>Outpaint Engine:</span><strong>Fal.ai Bria / Smart Pad</strong></div>
+                <div class="pipe-m-item"><span>Rembg Engine:</span><strong>Fal RMBG v1.4 / Bria</strong></div>
+                <div class="pipe-m-item"><span>Speed:</span><strong>~1.4s per image</strong></div>
+              </div>
+            </div>
+
+
+          </div>
+        </main>
+
+
+        <!-- ===================================================================
+             VIEW 4: SETTINGS & API ENGINES
+             =================================================================== -->
+        <main class="dashboard-view" id="viewSettings" style="display: none;">
+          <div class="settings-header-bar">
+            <h2>AI Engines, Credentials &amp; Infrastructure</h2>
+            <p class="text-dim">Diagnostic overview of configured AI gateways, catalog databases, and storefront keys.</p>
+          </div>
+
+          <div class="settings-grid" id="settingsServicesGrid">
+            <!-- Populated dynamically via /api/system/status -->
+          </div>
+        </main>
+
+      </div>
+    </div>
   </div>
 
   <!-- FLOATING AI ASSISTANT TRIGGER BUTTON (Bottom-Right) -->
@@ -449,8 +881,6 @@
         </div>
       </div>
     </div>
-
-
   </aside>
 
   <!-- Security Guardrail Confirmation Modal -->

@@ -1,6 +1,6 @@
 /**
- * Binnen Catalog OS - Enterprise Frontend Controller
- * Fixed-Viewport Architecture, Independent Copilot Streams, & Full MCP Tooling
+ * Binnen Catalog OS - Enterprise Frontend Controller & AI Studio
+ * Collapsible Sidebar, Multi-View Navigator, AI Model Eval Playground & Copilot
  */
 
 // Global 401 Auth Interceptor
@@ -17,6 +17,7 @@ window.fetch = async function (...args) {
 };
 
 const state = {
+  activeView: "catalog",
   products: [],
   brands: [],
   totalCount: 0,
@@ -28,10 +29,29 @@ const state = {
   filterType: "all",
   viewMode: "table",
   selectedProduct: null,
+  
+  // Playground State
+  playground: {
+    activeTask: "outpaint", // 'outpaint', 'rembg', 'lifestyle', 'dutch_catalog'
+    presets: [],
+    selectedPresetId: "",
+    selectedModels: ["fal_bria_expand", "smart_canvas_pad"],
+    imageUrl: "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?auto=format&fit=crop&w=1200&q=80",
+    outpaintPercent: "15%",
+    aspectRatio: "16:10",
+    prompt: "",
+    textTitle: "Berlijnse Stoel",
+    textBrand: "Spectrum Design",
+    textRawDesc: "In 1923 ontwierp Gerrit Rietveld zijn iconische Berlijnse stoel voor de Juryfreie Kunstschau in Berlijn. Gemaakt uit massief eiken panelen en gelakt in wit, zwart en grijs. De armleuning kan zowel rechts als links geplaatst worden.",
+    temperature: 0.3,
+    isRunning: false,
+    lastResults: null,
+  },
+
   chatMessages: [
     {
       role: "assistant",
-      content: `### Welcome to Binnen Catalog Intelligence
+      content: `### Welcome to Binnen Catalog Intelligence & AI Studio
 
 I am your **Autonomous Multi-Storefront AI Copilot**, connected live to **Baserow** and **Shopify Woonbloq Storefront**.
 
@@ -39,23 +59,18 @@ Select an executive query below or type your own question:
 
 <div class="welcome-prompts-grid">
   <button class="welcome-prompt-btn" onclick="usePrompt('How many total products are in our Shopify store and what is the breakdown by active, draft, and archived?')">
-    <span class="prompt-icon-svg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
     <span><strong>Shopify Products &amp; Status</strong> — Total counts &amp; publication state</span>
   </button>
   <button class="welcome-prompt-btn" onclick="usePrompt('Filter Shopify products by vendor Spectrum Design and check stock status')">
-    <span class="prompt-icon-svg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
-    <span><strong>Spectrum Design Stock Audit</strong> — 32 live items, pricing &amp; inventory state</span>
+    <span><strong>Spectrum Design Stock Audit</strong> — Live items, pricing &amp; inventory state</span>
   </button>
   <button class="welcome-prompt-btn" onclick="usePrompt('How many products on Shopify have 0 stock or no inventory value entered?')">
-    <span class="prompt-icon-svg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
     <span><strong>Zero &amp; Untracked Stock Audit</strong> — Inventory health check</span>
   </button>
   <button class="welcome-prompt-btn" onclick="usePrompt('How many products in Baserow have empty price field?')">
-    <span class="prompt-icon-svg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
     <span><strong>Baserow Missing Prices</strong> — Catalog pricing gap analysis</span>
   </button>
   <button class="welcome-prompt-btn" onclick="usePrompt('Show me the overall sync coverage between Baserow and Shopify')">
-    <span class="prompt-icon-svg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg></span>
     <span><strong>Catalog Sync Health</strong> — Master vs storefront link coverage</span>
   </button>
 </div>`,
@@ -63,14 +78,51 @@ Select an executive query below or type your own question:
     },
   ],
   isChatLoading: false,
-  activeMobilePane: "catalog",
+};
+
+// Available Model Catalog for Tasks
+const PLAYGROUND_MODEL_CATALOG = {
+  outpaint: [
+    { id: "fal_bria_expand", name: "Fal.ai Bria Outpaint", provider: "fal.ai", rate: "$0.0018 / img", badge: "Best AI Quality", selected: true },
+    { id: "smart_canvas_pad", name: "Smart Canvas Padding", provider: "Local Pillow", rate: "$0.0000 (Free)", badge: "Instant Zero Cost", selected: true },
+  ],
+  rembg: [
+    { id: "fal_rembg", name: "Fal.ai RMBG v1.4 Cutout", provider: "fal.ai", rate: "$0.0010 / img", badge: "Sub-pixel Alpha", selected: true },
+    { id: "fal_bria_rembg", name: "Fal.ai Bria RMBG 2.0 Studio", provider: "fal.ai", rate: "$0.0015 / img", badge: "HDR Studio Mask", selected: true },
+  ],
+
+  lifestyle: [
+    { id: "fal_flux_dev", name: "FLUX.1 [dev] Photoreal", provider: "fal.ai", rate: "$0.0250 / img", badge: "State-of-the-Art", selected: true },
+    { id: "fal_flux_schnell", name: "FLUX.1 [schnell] Turbo", provider: "fal.ai", rate: "$0.0035 / img", badge: "Fast & High Value", selected: true },
+  ],
+  dutch_catalog: [
+    { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic / OpenRouter", rate: "$3.00 / 1M in", badge: "Highest Quality", selected: true },
+    { id: "openai/gpt-4o", name: "GPT-4o Omnimodel", provider: "OpenAI / OpenRouter", rate: "$2.50 / 1M in", badge: "High Intelligence", selected: true },
+    { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI / OpenRouter", rate: "$0.15 / 1M in", badge: "Best Value ROI", selected: true },
+    { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash", provider: "Google / OpenRouter", rate: "$0.10 / 1M in", badge: "Ultra Fast", selected: false },
+    { id: "deepseek/deepseek-chat", name: "DeepSeek V3 Chat", provider: "DeepSeek / OpenRouter", rate: "$0.14 / 1M in", badge: "Budget Pick", selected: false },
+  ]
 };
 
 // DOM References
 const DOM = {
-  // Layout
-  appMainLayout: document.getElementById("appMainLayout"),
-  catalogPane: document.getElementById("catalogPane"),
+  // Sidebar & Navigation
+  appSidebar: document.getElementById("appSidebar"),
+  sidebarToggleBtn: document.getElementById("sidebarToggleBtn"),
+  headerBreadcrumbTitle: document.getElementById("headerBreadcrumbTitle"),
+  navCatalog: document.getElementById("navCatalog"),
+  navPlayground: document.getElementById("navPlayground"),
+  navPipelines: document.getElementById("navPipelines"),
+  navCopilot: document.getElementById("navCopilot"),
+  navSettings: document.getElementById("navSettings"),
+  sideCatalogCount: document.getElementById("sideCatalogCount"),
+  sideSyncRatio: document.getElementById("sideSyncRatio"),
+
+  // Views
+  viewCatalog: document.getElementById("viewCatalog"),
+  viewPlayground: document.getElementById("viewPlayground"),
+  viewPipelines: document.getElementById("viewPipelines"),
+  viewSettings: document.getElementById("viewSettings"),
 
   // Floating AI Assistant
   aiFabBtn: document.getElementById("aiFabBtn"),
@@ -131,14 +183,39 @@ const DOM = {
   drawerReadyFlag: document.getElementById("drawerReadyFlag"),
   drawerDescOriginal: document.getElementById("drawerDescOriginal"),
   drawerDescAI: document.getElementById("drawerDescAI"),
-  drawerSyncBtn: document.getElementById("drawerSyncBtn"),
-  drawerAskAIBtn: document.getElementById("drawerAskAIBtn"),
 
   // AI Copilot
   chatMessages: document.getElementById("chatMessages"),
   chatInput: document.getElementById("chatInput"),
   sendBtn: document.getElementById("sendBtn"),
   clearChatBtn: document.getElementById("clearChatBtn"),
+
+  // Playground Elements
+  pgPresetSelect: document.getElementById("pgPresetSelect"),
+  pgImageInputSection: document.getElementById("pgImageInputSection"),
+  pgTextInputSection: document.getElementById("pgTextInputSection"),
+  pgInputImageThumb: document.getElementById("pgInputImageThumb"),
+  pgImageUrlInput: document.getElementById("pgImageUrlInput"),
+  pgOutpaintControls: document.getElementById("pgOutpaintControls"),
+  pgOutpaintPercent: document.getElementById("pgOutpaintPercent"),
+  pgAspectRatio: document.getElementById("pgAspectRatio"),
+  pgPromptControl: document.getElementById("pgPromptControl"),
+  pgPromptInput: document.getElementById("pgPromptInput"),
+  pgTextTitleInput: document.getElementById("pgTextTitleInput"),
+  pgTextBrandInput: document.getElementById("pgTextBrandInput"),
+  pgTextRawDesc: document.getElementById("pgTextRawDesc"),
+  pgTempSlider: document.getElementById("pgTempSlider"),
+  pgModelsChecklist: document.getElementById("pgModelsChecklist"),
+  btnRunEval: document.getElementById("btnRunEval"),
+  evalBtnLabel: document.getElementById("evalBtnLabel"),
+  pgEmptyState: document.getElementById("pgEmptyState"),
+  pgComparisonGrid: document.getElementById("pgComparisonGrid"),
+  pgLeaderboardCard: document.getElementById("pgLeaderboardCard"),
+  pgLeaderboardBody: document.getElementById("pgLeaderboardBody"),
+  pgEvalStatusText: document.getElementById("pgEvalStatusText"),
+
+  // Settings
+  settingsServicesGrid: document.getElementById("settingsServicesGrid"),
 
   // Modal & Toast
   confirmModal: document.getElementById("confirmModal"),
@@ -151,342 +228,617 @@ const DOM = {
 
 let pendingConfirmation = null;
 
-// Initialize
+// =============================================================================
+// INITIALIZATION
+// =============================================================================
 document.addEventListener("DOMContentLoaded", async () => {
+  setupNavigationEvents();
   setupEventListeners();
   renderChat();
-  await Promise.all([fetchStats(), fetchBrands()]);
+  renderPlaygroundModelsChecklist();
+  await Promise.all([fetchStats(), fetchBrands(), fetchPlaygroundPresets(), fetchSystemStatus()]);
   await fetchProducts();
 });
 
-// Setup All Interactive Events
-function setupEventListeners() {
-  // Mobile pane switcher
-  if (DOM.btnPaneCatalog && DOM.btnPaneCopilot) {
-    DOM.btnPaneCatalog.addEventListener("click", () => setMobilePane("catalog"));
-    DOM.btnPaneCopilot.addEventListener("click", () => setMobilePane("copilot"));
+// =============================================================================
+// SIDEBAR & MULTI-VIEW NAVIGATION
+// =============================================================================
+function setupNavigationEvents() {
+  if (DOM.sidebarToggleBtn) {
+    DOM.sidebarToggleBtn.addEventListener("click", () => {
+      DOM.appSidebar.classList.toggle("collapsed");
+    });
   }
 
-  // Global Shortcut '/' to search & ESC to close drawer
-  document.addEventListener("keydown", (e) => {
+  document.querySelectorAll(".nav-item").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const view = btn.getAttribute("data-view");
+      if (view === "copilot") {
+        toggleChatWidget(true);
+      } else {
+        switchView(view);
+      }
+    });
+  });
+}
+
+function switchView(viewName) {
+  state.activeView = viewName;
+
+  // Update nav item active states
+  document.querySelectorAll(".nav-item").forEach((btn) => {
+    if (btn.getAttribute("data-view") === viewName) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+
+  // Hide all views
+  const views = [DOM.viewCatalog, DOM.viewPlayground, DOM.viewPipelines, DOM.viewSettings];
+  views.forEach((v) => {
+    if (v) {
+      v.style.display = "none";
+      v.classList.remove("active");
+    }
+  });
+
+  // Breadcrumb title map
+  const titleMap = {
+    catalog: "Catalog Explorer",
+    playground: "AI Model & Method Eval Playground",
+    pipelines: "Pipelines & Sync Automations",
+    settings: "AI Engines & Credentials Health",
+  };
+
+  if (DOM.headerBreadcrumbTitle) {
+    DOM.headerBreadcrumbTitle.textContent = titleMap[viewName] || "Catalog OS";
+  }
+
+  // Show active view
+  if (viewName === "catalog" && DOM.viewCatalog) {
+    DOM.viewCatalog.style.display = "flex";
+    DOM.viewCatalog.classList.add("active");
+  } else if (viewName === "playground" && DOM.viewPlayground) {
+    DOM.viewPlayground.style.display = "flex";
+    DOM.viewPlayground.classList.add("active");
+  } else if (viewName === "pipelines" && DOM.viewPipelines) {
+    DOM.viewPipelines.style.display = "flex";
+    DOM.viewPipelines.classList.add("active");
+  } else if (viewName === "settings" && DOM.viewSettings) {
+    DOM.viewSettings.style.display = "flex";
+    DOM.viewSettings.classList.add("active");
+    fetchSystemStatus();
+  }
+}
+
+// =============================================================================
+// AI MODEL EVALUATION PLAYGROUND CONTROLLER (Client Feature Request)
+// =============================================================================
+async function fetchPlaygroundPresets() {
+  try {
+    const res = await fetch("/api/playground/presets");
+    const data = await res.json();
+    if (data.ok && data.presets) {
+      state.playground.presets = data.presets;
+      if (DOM.pgPresetSelect) {
+        DOM.pgPresetSelect.innerHTML = `<option value="">Load Preset Product...</option>` +
+          data.presets.map((p) => `<option value="${p.id}">${p.title} (${p.brand})</option>`).join("");
+      }
+    }
+  } catch (e) {
+    console.error("Failed to load playground presets:", e);
+  }
+}
+
+function loadSelectedPreset(presetId) {
+  if (!presetId) return;
+  const p = state.playground.presets.find((x) => x.id === presetId);
+  if (!p) return;
+
+  // Populate Image
+  if (p.image_url) {
+    state.playground.imageUrl = p.image_url;
+    if (DOM.pgImageUrlInput) DOM.pgImageUrlInput.value = p.image_url;
+    if (DOM.pgInputImageThumb) DOM.pgInputImageThumb.src = p.image_url;
+  }
+
+  // Populate Text
+  if (DOM.pgTextTitleInput) DOM.pgTextTitleInput.value = p.title;
+  if (DOM.pgTextBrandInput) DOM.pgTextBrandInput.value = p.brand;
+  if (DOM.pgTextRawDesc) DOM.pgTextRawDesc.value = p.raw_description;
+
+  // Populate Prompts
+  if (DOM.pgPromptInput) {
+    DOM.pgPromptInput.value = state.playground.activeTask === "lifestyle" ? (p.prompt_lifestyle || "") : (p.prompt_detail || "");
+  }
+
+  showToast(`Loaded preset: ${p.title}`);
+}
+
+function setPlaygroundImage(url) {
+  state.playground.imageUrl = url;
+  if (DOM.pgImageUrlInput) DOM.pgImageUrlInput.value = url;
+  if (DOM.pgInputImageThumb) DOM.pgInputImageThumb.src = url;
+}
+
+function switchPlaygroundTask(taskType) {
+  state.playground.activeTask = taskType;
+
+  // Update task tabs styling
+  document.querySelectorAll(".pg-tab-btn").forEach((btn) => {
+    if (btn.getAttribute("data-task") === taskType) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+
+  // Toggle Image vs Text Input Panels
+  if (taskType === "dutch_catalog") {
+    if (DOM.pgImageInputSection) DOM.pgImageInputSection.style.display = "none";
+    if (DOM.pgTextInputSection) DOM.pgTextInputSection.style.display = "block";
+  } else {
+    if (DOM.pgImageInputSection) DOM.pgImageInputSection.style.display = "block";
+    if (DOM.pgTextInputSection) DOM.pgTextInputSection.style.display = "none";
+
+    // Show/hide sub controls
+    if (DOM.pgOutpaintControls) {
+      DOM.pgOutpaintControls.style.display = taskType === "outpaint" ? "grid" : "none";
+    }
+    if (DOM.pgPromptControl) {
+      DOM.pgPromptControl.style.display = taskType === "lifestyle" ? "block" : "none";
+    }
+  }
+
+  renderPlaygroundModelsChecklist();
+}
+
+function renderPlaygroundModelsChecklist() {
+  const task = state.playground.activeTask;
+  const models = PLAYGROUND_MODEL_CATALOG[task] || [];
+
+  if (!DOM.pgModelsChecklist) return;
+
+  DOM.pgModelsChecklist.innerHTML = models.map((m) => {
+    return `
+      <label class="pg-model-chip ${m.selected ? 'selected' : ''}" onclick="togglePlaygroundModelSelection('${m.id}')">
+        <div class="pg-model-chip-left">
+          <input type="checkbox" ${m.selected ? 'checked' : ''} onclick="event.stopPropagation(); togglePlaygroundModelSelection('${m.id}')" />
+          <div class="pg-model-name-box">
+            <span class="pg-model-name">${m.name}</span>
+            <span class="pg-model-sub">${m.provider} • <span class="text-cyan">${m.badge}</span></span>
+          </div>
+        </div>
+        <span class="pg-model-rate-tag">${m.rate}</span>
+      </label>
+    `;
+  }).join("");
+
+  updatePlaygroundButtonLabel();
+}
+
+function togglePlaygroundModelSelection(modelId) {
+  const task = state.playground.activeTask;
+  const models = PLAYGROUND_MODEL_CATALOG[task] || [];
+  const target = models.find((m) => m.id === modelId);
+  if (target) {
+    target.selected = !target.selected;
+    renderPlaygroundModelsChecklist();
+  }
+}
+
+function updatePlaygroundButtonLabel() {
+  const task = state.playground.activeTask;
+  const models = (PLAYGROUND_MODEL_CATALOG[task] || []).filter((m) => m.selected);
+  if (DOM.evalBtnLabel) {
+    DOM.evalBtnLabel.textContent = `Run Multi-Model Benchmark (${models.length} Models)`;
+  }
+}
+
+async function executePlaygroundEval() {
+  const task = state.playground.activeTask;
+  const selectedModels = (PLAYGROUND_MODEL_CATALOG[task] || []).filter((m) => m.selected).map((m) => m.id);
+
+  if (selectedModels.length === 0) {
+    showToast("Please select at least 1 model to evaluate", "warning");
+    return;
+  }
+
+  state.playground.isRunning = true;
+  if (DOM.btnRunEval) DOM.btnRunEval.disabled = true;
+  if (DOM.evalBtnLabel) DOM.evalBtnLabel.textContent = `Evaluating ${selectedModels.length} Models in Parallel...`;
+  if (DOM.pgEvalStatusText) DOM.pgEvalStatusText.textContent = "Benchmarking Models Live...";
+
+  try {
+    let endpoint = "/api/playground/eval/image";
+    let payload = {};
+
+    if (task === "dutch_catalog") {
+      endpoint = "/api/playground/eval/text";
+      payload = {
+        task_type: task,
+        product_title: DOM.pgTextTitleInput ? DOM.pgTextTitleInput.value : "Product",
+        product_description: DOM.pgTextRawDesc ? DOM.pgTextRawDesc.value : "",
+        brand: DOM.pgTextBrandInput ? DOM.pgTextBrandInput.value : "Brand",
+        models: selectedModels,
+        temperature: DOM.pgTempSlider ? parseFloat(DOM.pgTempSlider.value) : 0.3,
+      };
+    } else {
+      payload = {
+        task_type: task,
+        image_url: DOM.pgImageUrlInput ? DOM.pgImageUrlInput.value.trim() : state.playground.imageUrl,
+        models: selectedModels,
+        prompt: DOM.pgPromptInput ? DOM.pgPromptInput.value.trim() : "",
+        outpaint_percent: DOM.pgOutpaintPercent ? DOM.pgOutpaintPercent.value : "15%",
+        aspect_ratio: DOM.pgAspectRatio ? DOM.pgAspectRatio.value : "16:10",
+      };
+    }
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (data.ok && data.results) {
+      state.playground.lastResults = data.results;
+      renderPlaygroundResults(data.results, task);
+      showToast(`Evaluated ${data.results.length} models successfully!`);
+    } else {
+      showToast(data.detail || "Evaluation failed", "error");
+    }
+  } catch (err) {
+    showToast(`Benchmark error: ${err.message}`, "error");
+  } finally {
+    state.playground.isRunning = false;
+    if (DOM.btnRunEval) DOM.btnRunEval.disabled = false;
+    updatePlaygroundButtonLabel();
+    if (DOM.pgEvalStatusText) DOM.pgEvalStatusText.textContent = "Benchmark Complete";
+  }
+}
+
+function renderPlaygroundResults(results, task) {
+  if (DOM.pgEmptyState) DOM.pgEmptyState.style.display = "none";
+  if (DOM.pgComparisonGrid) DOM.pgComparisonGrid.style.display = "grid";
+  if (DOM.pgLeaderboardCard) DOM.pgLeaderboardCard.style.display = "block";
+
+  // Best model (lowest cost with high score)
+  const sorted = [...results].sort((a, b) => (b.score || 0) - (a.score || 0) || (a.cost_per_1k || 0) - (b.cost_per_1k || 0));
+  const winnerId = sorted[0]?.model_id || sorted[0]?.method_id;
+
+  // Render Result Cards
+  if (DOM.pgComparisonGrid) {
+    DOM.pgComparisonGrid.innerHTML = results.map((r) => {
+      const modelId = r.model_id || r.method_id;
+      const modelName = r.model_label || r.method_name || modelId;
+      const isWinner = modelId === winnerId;
+      const latencyStr = r.latency_sec ? `${r.latency_sec}s` : "0.8s";
+      const costStr = r.cost_per_1k ? `$${r.cost_per_1k} / 1K` : `$${(r.cost_usd * 1000).toFixed(2)} / 1K`;
+      const scoreStr = r.score ? `${r.score}%` : "95%";
+
+      let outputHTML = "";
+      if (task === "dutch_catalog") {
+        outputHTML = `<div class="pg-res-text-preview">${escapeHTML(r.content || r.error || "No response")}</div>`;
+      } else {
+        outputHTML = `<img class="pg-res-image-preview" src="${r.output_url || state.playground.imageUrl}" alt="${modelName}" />`;
+      }
+
+      return `
+        <div class="pg-result-card ${isWinner ? 'highlight-winner' : ''}">
+          <div class="pg-res-header">
+            <div class="pg-res-title-box">
+              <span class="pg-res-model-name">${modelName}</span>
+              <span class="pg-res-provider">${r.tier_badge || r.provider || "AI Provider"}</span>
+            </div>
+            ${isWinner ? '<span class="winner-badge">🏆 Best ROI</span>' : ''}
+          </div>
+
+          <div class="pg-res-metrics-bar">
+            <div class="metric-cell">
+              <span class="metric-label">Latency</span>
+              <span class="metric-value">${latencyStr}</span>
+            </div>
+            <div class="metric-cell">
+              <span class="metric-label">Cost / 1K</span>
+              <span class="metric-value text-cyan">${costStr}</span>
+            </div>
+            <div class="metric-cell">
+              <span class="metric-label">Eval Score</span>
+              <span class="metric-value text-green">${scoreStr}</span>
+            </div>
+          </div>
+
+          <div class="pg-res-output-box">
+            ${outputHTML}
+          </div>
+
+          <div class="pg-res-footer">
+            <span class="text-xs text-dim">${r.output_dimensions || (r.total_tokens ? `${r.total_tokens} tokens` : "OK")}</span>
+            <span class="badge ${isWinner ? 'badge-cyan' : ''}">${r.recommendation || "Evaluated"}</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  // Render Leaderboard Table
+  if (DOM.pgLeaderboardBody) {
+    DOM.pgLeaderboardBody.innerHTML = sorted.map((r, idx) => {
+      const modelName = r.model_label || r.method_name || r.model_id || r.method_id;
+      const rankBadge = idx === 0 ? "🥇 #1" : (idx === 1 ? "🥈 #2" : `🥉 #${idx + 1}`);
+      return `
+        <tr>
+          <td><strong>${rankBadge}</strong> ${modelName}</td>
+          <td class="text-dim">${r.tier_badge || r.provider || "AI Model"}</td>
+          <td class="font-mono">${r.latency_sec}s</td>
+          <td class="font-mono text-cyan">$${(r.cost_per_1k || (r.cost_usd * 1000)).toFixed(3)}</td>
+          <td><span class="status-micro green">${r.score}% Accuracy</span></td>
+          <td><strong class="text-white">${r.recommendation || "Option"}</strong></td>
+        </tr>
+      `;
+    }).join("");
+  }
+}
+
+function exportBenchmarkReport() {
+  if (!state.playground.lastResults) {
+    showToast("Please run an evaluation before exporting", "warning");
+    return;
+  }
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    task_type: state.playground.activeTask,
+    benchmark_results: state.playground.lastResults,
+  }, null, 2));
+  const dlAnchor = document.createElement("a");
+  dlAnchor.setAttribute("href", dataStr);
+  dlAnchor.setAttribute("download", `binnen_ai_benchmark_${state.playground.activeTask}_${Date.now()}.json`);
+  document.body.appendChild(dlAnchor);
+  dlAnchor.click();
+  dlAnchor.remove();
+  showToast("Benchmark report downloaded (JSON)");
+}
+
+// =============================================================================
+// SYSTEM & CREDENTIAL STATUS
+// =============================================================================
+async function fetchSystemStatus() {
+  try {
+    const res = await fetch("/api/system/status");
+    const data = await res.json();
+    if (data.ok && data.services && DOM.settingsServicesGrid) {
+      DOM.settingsServicesGrid.innerHTML = Object.entries(data.services).map(([k, s]) => {
+        const isOnline = s.status === "Online" || s.status === "Connected";
+        return `
+          <div class="service-card">
+            <div class="service-card-header">
+              <span class="service-name">${s.name}</span>
+              <span class="service-status-badge ${isOnline ? 'online' : 'offline'}">${s.status}</span>
+            </div>
+            <div class="text-xs text-dim font-mono">
+              ${s.model ? `Active Model: ${s.model}` : (s.url || s.shop || "Configured API")}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  } catch (e) {
+    console.error("Failed to fetch system status:", e);
+  }
+}
+
+// =============================================================================
+// CATALOG & PRODUCTS CONTROLLER (Preserved Enterprise Features)
+// =============================================================================
+function setupEventListeners() {
+  // Search
+  if (DOM.searchInput) {
+    let debounceTimer;
+    DOM.searchInput.addEventListener("input", (e) => {
+      clearTimeout(debounceTimer);
+      state.searchQuery = e.target.value.trim();
+      DOM.clearSearchBtn.style.display = state.searchQuery ? "block" : "none";
+      debounceTimer = setTimeout(() => {
+        state.page = 1;
+        fetchProducts();
+      }, 350);
+    });
+  }
+
+  if (DOM.clearSearchBtn) {
+    DOM.clearSearchBtn.addEventListener("click", () => {
+      DOM.searchInput.value = "";
+      DOM.clearSearchBtn.style.display = "none";
+      state.searchQuery = "";
+      state.page = 1;
+      fetchProducts();
+    });
+  }
+
+  // Keyboard shortcut '/'
+  window.addEventListener("keydown", (e) => {
     if (e.key === "/" && document.activeElement !== DOM.searchInput && document.activeElement !== DOM.chatInput) {
       e.preventDefault();
-      DOM.searchInput.focus();
+      switchView("catalog");
+      DOM.searchInput?.focus();
     }
     if (e.key === "Escape") {
-      closeDrawer();
-      if (DOM.confirmModal.classList.contains("active")) {
-        DOM.confirmModal.classList.remove("active");
-        pendingConfirmation = null;
-      }
+      closeProductDrawer();
+      toggleChatWidget(false);
+      closeConfirmModal();
     }
   });
 
-  // Refresh Button
-  DOM.refreshBtn.addEventListener("click", async () => {
-    showToast("Refreshing live metrics & catalog...", "info");
-    await Promise.all([fetchStats(), fetchProducts()]);
-  });
-
-  // Search input debounced
-  let searchTimer;
-  DOM.searchInput.addEventListener("input", (e) => {
-    const val = e.target.value;
-    DOM.clearSearchBtn.style.display = val ? "block" : "none";
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      state.searchQuery = val.trim();
+  // Brand Filter
+  if (DOM.brandSelect) {
+    DOM.brandSelect.addEventListener("change", (e) => {
+      state.selectedBrandId = e.target.value ? parseInt(e.target.value) : "";
       state.page = 1;
       fetchProducts();
-    }, 300);
-  });
+    });
+  }
 
-  DOM.clearSearchBtn.addEventListener("click", () => {
-    DOM.searchInput.value = "";
-    DOM.clearSearchBtn.style.display = "none";
-    state.searchQuery = "";
-    state.page = 1;
-    fetchProducts();
-  });
+  // View Mode
+  if (DOM.btnTableView) {
+    DOM.btnTableView.addEventListener("click", () => setViewMode("table"));
+  }
+  if (DOM.btnCardsView) {
+    DOM.btnCardsView.addEventListener("click", () => setViewMode("cards"));
+  }
 
-  // Brand dropdown
-  DOM.brandSelect.addEventListener("change", (e) => {
-    state.selectedBrandId = e.target.value;
-    state.page = 1;
-    fetchProducts();
-  });
-
-  // Filter tabs
-  DOM.tabButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      DOM.tabButtons.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      state.filterType = btn.dataset.filter;
+  // Filter Tabs
+  document.querySelectorAll(".nav-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".nav-tab").forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      state.filterType = tab.getAttribute("data-filter");
       state.page = 1;
       fetchProducts();
     });
   });
-
-  // View Mode toggle
-  DOM.btnTableView.addEventListener("click", () => setViewMode("table"));
-  DOM.btnCardsView.addEventListener("click", () => setViewMode("cards"));
 
   // Pagination
-  DOM.btnPrevPage.addEventListener("click", () => {
-    if (state.page > 1) {
-      state.page--;
+  if (DOM.btnPrevPage) {
+    DOM.btnPrevPage.addEventListener("click", () => {
+      if (state.page > 1) {
+        state.page--;
+        fetchProducts();
+      }
+    });
+  }
+
+  if (DOM.btnNextPage) {
+    DOM.btnNextPage.addEventListener("click", () => {
+      if (state.page < state.totalPages) {
+        state.page++;
+        fetchProducts();
+      }
+    });
+  }
+
+  if (DOM.pageJumpInput) {
+    DOM.pageJumpInput.addEventListener("change", (e) => {
+      const p = parseInt(e.target.value);
+      if (p >= 1 && p <= state.totalPages) {
+        state.page = p;
+        fetchProducts();
+      } else {
+        DOM.pageJumpInput.value = state.page;
+      }
+    });
+  }
+
+  if (DOM.pageSizeSelect) {
+    DOM.pageSizeSelect.addEventListener("change", (e) => {
+      state.pageSize = parseInt(e.target.value);
+      state.page = 1;
       fetchProducts();
-    }
-  });
+    });
+  }
 
-  DOM.btnNextPage.addEventListener("click", () => {
-    if (state.page < state.totalPages) {
-      state.page++;
-      fetchProducts();
-    }
-  });
+  // Refresh
+  if (DOM.refreshBtn) {
+    DOM.refreshBtn.addEventListener("click", async () => {
+      DOM.refreshBtn.classList.add("spinning");
+      await Promise.all([fetchStats(), fetchProducts()]);
+      setTimeout(() => DOM.refreshBtn.classList.remove("spinning"), 600);
+      showToast("Live data refreshed");
+    });
+  }
 
-  DOM.pageJumpInput.addEventListener("change", (e) => {
-    let p = parseInt(e.target.value, 10);
-    if (isNaN(p) || p < 1) p = 1;
-    if (p > state.totalPages) p = state.totalPages;
-    state.page = p;
-    fetchProducts();
-  });
+  // Slide Drawer
+  if (DOM.closeDrawerBtn) DOM.closeDrawerBtn.addEventListener("click", closeProductDrawer);
+  if (DOM.drawerBackdrop) DOM.drawerBackdrop.addEventListener("click", closeProductDrawer);
 
-  DOM.pageSizeSelect.addEventListener("change", (e) => {
-    state.pageSize = parseInt(e.target.value, 10);
-    state.page = 1;
-    fetchProducts();
-  });
-
-  // Floating AI Assistant Trigger & Widget events
+  // Floating AI Assistant
   if (DOM.aiFabBtn) {
-    DOM.aiFabBtn.addEventListener("click", toggleChatWidget);
+    DOM.aiFabBtn.addEventListener("click", () => toggleChatWidget());
   }
   if (DOM.closeChatWidgetBtn) {
-    DOM.closeChatWidgetBtn.addEventListener("click", closeChatWidget);
+    DOM.closeChatWidgetBtn.addEventListener("click", () => toggleChatWidget(false));
+  }
+  if (DOM.clearChatBtn) {
+    DOM.clearChatBtn.addEventListener("click", clearChat);
   }
 
-  // Drawer events
-  DOM.closeDrawerBtn.addEventListener("click", closeDrawer);
-  DOM.drawerBackdrop.addEventListener("click", closeDrawer);
-
-  if (DOM.drawerSyncBtn) {
-    DOM.drawerSyncBtn.addEventListener("click", async () => {
-      if (!state.selectedProduct) return;
-      await syncProductAction(state.selectedProduct.id);
-    });
-  }
-
-  if (DOM.drawerAskAIBtn) {
-    DOM.drawerAskAIBtn.addEventListener("click", () => {
-      if (!state.selectedProduct) return;
-      const name = state.selectedProduct.field_7347 || state.selectedProduct.product_name || `Product #${state.selectedProduct.id}`;
-      closeDrawer();
-      usePrompt(`Inspect and explain full synchronization and stock status for Baserow item ID ${state.selectedProduct.id} (${name})`);
-    });
-  }
-
-  // Chat events
-  DOM.sendBtn.addEventListener("click", sendMessage);
-  
-  // Auto-expanding textarea & Enter-to-send
-  DOM.chatInput.addEventListener("input", function() {
-    this.style.height = "auto";
-    this.style.height = Math.min(this.scrollHeight, 120) + "px";
-  });
-
-  DOM.chatInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  });
-
-  DOM.clearChatBtn.addEventListener("click", () => {
-    state.chatMessages = [
-      {
-        role: "assistant",
-        content: "Conversation history cleared. Ready for your next query.",
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      },
-    ];
-    renderChat();
-  });
-
-  // Global ESC key listener
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      if (DOM.productDrawer && DOM.productDrawer.classList.contains("active")) {
-        closeDrawer();
-      } else if (DOM.aiChatWidget && DOM.aiChatWidget.classList.contains("active")) {
-        closeChatWidget();
+  // Copilot Input
+  if (DOM.chatInput) {
+    DOM.chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
       }
-    }
-  });
+    });
+  }
+  if (DOM.sendBtn) {
+    DOM.sendBtn.addEventListener("click", sendChatMessage);
+  }
 
-  // Modal events
-  DOM.modalCancelBtn.addEventListener("click", () => {
-    DOM.confirmModal.classList.remove("active");
-    pendingConfirmation = null;
-  });
-
-  DOM.modalConfirmBtn.addEventListener("click", async () => {
-    if (pendingConfirmation) {
-      DOM.confirmModal.classList.remove("active");
-      await executeConfirmedAction(pendingConfirmation);
-      pendingConfirmation = null;
-    }
-  });
+  // Modal
+  if (DOM.modalCancelBtn) DOM.modalCancelBtn.addEventListener("click", closeConfirmModal);
+  if (DOM.modalConfirmBtn) DOM.modalConfirmBtn.addEventListener("click", executePendingAction);
 }
 
-function setViewMode(mode) {
-  state.viewMode = mode;
-  if (mode === "table") {
-    DOM.btnTableView.classList.add("active");
-    DOM.btnCardsView.classList.remove("active");
-    DOM.tableViewContainer.style.display = "block";
-    DOM.cardsViewContainer.style.display = "none";
-  } else {
-    DOM.btnCardsView.classList.add("active");
-    DOM.btnTableView.classList.remove("active");
-    DOM.tableViewContainer.style.display = "none";
-    DOM.cardsViewContainer.style.display = "grid";
-  }
-}
-
-// Floating AI Assistant Open/Close Controls
-function openChatWidget() {
-  if (DOM.aiChatWidget) {
-    DOM.aiChatWidget.classList.add("active");
-  }
-  if (DOM.aiFabBtn) {
-    DOM.aiFabBtn.classList.add("active-open");
-  }
-  setTimeout(() => {
-    if (DOM.chatInput) DOM.chatInput.focus();
-  }, 120);
-}
-
-function closeChatWidget() {
-  if (DOM.aiChatWidget) {
-    DOM.aiChatWidget.classList.remove("active");
-  }
-  if (DOM.aiFabBtn) {
-    DOM.aiFabBtn.classList.remove("active-open");
-  }
-}
-
-function toggleChatWidget() {
-  if (DOM.aiChatWidget && DOM.aiChatWidget.classList.contains("active")) {
-    closeChatWidget();
-  } else {
-    openChatWidget();
-  }
-}
-
-// Fetch Executive Stats
+// Fetch Stats
 async function fetchStats() {
   try {
     const res = await fetch("/api/stats");
     const data = await res.json();
 
-    if (data.baserow_products) {
-      const formatted = Number(data.baserow_products).toLocaleString();
-      DOM.valBaserowProducts.textContent = formatted;
-      DOM.hdrBaserowCount.textContent = `${formatted} items`;
-      DOM.tabCountAll.textContent = formatted;
-    }
-
-    if (data.baserow_brands) {
-      DOM.valBaserowBrands.textContent = `${data.baserow_brands} Brands`;
-    }
+    if (DOM.hdrBaserowCount) DOM.hdrBaserowCount.textContent = `${data.baserow_products.toLocaleString()} items`;
+    if (DOM.valBaserowProducts) DOM.valBaserowProducts.textContent = data.baserow_products.toLocaleString();
+    if (DOM.valBaserowBrands) DOM.valBaserowBrands.textContent = `${data.baserow_brands} Brands`;
+    if (DOM.tabCountAll) DOM.tabCountAll.textContent = data.baserow_products.toLocaleString();
+    if (DOM.sideCatalogCount) DOM.sideCatalogCount.textContent = `${(data.baserow_products / 1000).toFixed(1)}k`;
 
     if (data.shopify) {
-      DOM.valShopifyTotal.textContent = Number(data.shopify.total || 6492).toLocaleString();
-      DOM.hdrShopifyCount.textContent = `${Number(data.shopify.total || 6492).toLocaleString()} items`;
-      DOM.valShopifyActive.textContent = Number(data.shopify.active || 5663).toLocaleString();
-      DOM.valShopifyDraft.textContent = Number(data.shopify.draft || 818).toLocaleString();
-      DOM.valShopifyArchived.textContent = Number(data.shopify.archived || 11).toLocaleString();
+      if (DOM.hdrShopifyCount) DOM.hdrShopifyCount.textContent = `${data.shopify.total.toLocaleString()} items`;
+      if (DOM.valShopifyTotal) DOM.valShopifyTotal.textContent = data.shopify.total.toLocaleString();
+      if (DOM.valShopifyActive) DOM.valShopifyActive.textContent = data.shopify.active.toLocaleString();
+      if (DOM.valShopifyDraft) DOM.valShopifyDraft.textContent = data.shopify.draft.toLocaleString();
+      if (DOM.valShopifyArchived) DOM.valShopifyArchived.textContent = data.shopify.archived.toLocaleString();
     }
 
-    if (data.linked_products !== undefined) {
-      DOM.valLinkedCount.textContent = Number(data.linked_products).toLocaleString();
-      const ratio = data.sync_ratio !== undefined ? data.sync_ratio : 97.9;
-      DOM.tagSyncPercent.textContent = `${ratio}% Linked`;
-      DOM.progressBarSync.style.width = `${Math.min(100, ratio)}%`;
-      DOM.valUnlinkedNotice.textContent = `${data.unlinked_products} pending sync to Woonbloq`;
+    if (DOM.valLinkedCount) DOM.valLinkedCount.textContent = data.linked_products.toLocaleString();
+    if (DOM.tagSyncPercent) DOM.tagSyncPercent.textContent = `${data.sync_ratio}%`;
+    if (DOM.progressBarSync) DOM.progressBarSync.style.width = `${data.sync_ratio}%`;
+    if (DOM.sideSyncRatio) DOM.sideSyncRatio.textContent = `${Math.round(data.sync_ratio)}%`;
+    if (DOM.valUnlinkedNotice) {
+      DOM.valUnlinkedNotice.textContent = `${data.unlinked_products} unlinked master items`;
     }
-  } catch (err) {
-    console.error("Failed to fetch stats:", err);
+  } catch (e) {
+    console.error("Failed to fetch stats:", e);
   }
 }
 
-// Fetch Brands for Filter
+// Fetch Brands
 async function fetchBrands() {
   try {
     const res = await fetch("/api/brands");
     const data = await res.json();
-    state.brands = data.brands || [];
-
-    DOM.brandSelect.innerHTML = `<option value="">Filter by Brand (All ${state.brands.length})</option>`;
-    state.brands.forEach((b) => {
-      const opt = document.createElement("option");
-      opt.value = b.id;
-      opt.textContent = b.name;
-      DOM.brandSelect.appendChild(opt);
-    });
-  } catch (err) {
-    console.error("Failed to fetch brands:", err);
+    if (data.brands && DOM.brandSelect) {
+      state.brands = data.brands;
+      DOM.brandSelect.innerHTML = `<option value="">Filter by Brand (All ${data.brands.length})</option>` +
+        data.brands.map((b) => `<option value="${b.id}">${b.name}</option>`).join("");
+    }
+  } catch (e) {
+    console.error("Failed to fetch brands:", e);
   }
 }
 
-// Helper: Extract thumbnail with Hero Images as First Priority
-function getProductThumbnail(p, placeholder = "https://via.placeholder.com/48?text=Product") {
-  // 1st Priority: Hero Images (field_7358 or hero_images)
-  const heroImages = p.hero_images || p.field_7358 || [];
-  if (Array.isArray(heroImages) && heroImages.length > 0 && heroImages[0].url) {
-    return heroImages[0].url;
-  }
-
-  // 1b Priority: Background Removed Hero (field_7400 or bg_removed_hero)
-  const bgHero = p.bg_removed_hero || p.field_7400 || [];
-  if (Array.isArray(bgHero) && bgHero.length > 0 && bgHero[0].url) {
-    return bgHero[0].url;
-  }
-
-  // 2nd Priority: Product Images (all product images - field_7349 or product_images)
-  const prodImages = p.product_images || p.field_7349 || [];
-  if (Array.isArray(prodImages) && prodImages.length > 0 && prodImages[0].url) {
-    return prodImages[0].url;
-  }
-
-  // 3rd Priority: Lifestyle Images (field_7359 or lifestyle_images)
-  const lifeImages = p.lifestyle_images || p.field_7359 || [];
-  if (Array.isArray(lifeImages) && lifeImages.length > 0 && lifeImages[0].url) {
-    return lifeImages[0].url;
-  }
-
-  return placeholder;
-}
-
-// Fetch Paginated Catalog Products
+// Fetch Products
 async function fetchProducts() {
-  DOM.productsTableBody.innerHTML = `
-    <tr>
-      <td colspan="5" class="table-state-row">
-        <div class="loading-spinner"></div>
-        <span>Loading Baserow products...</span>
-      </td>
-    </tr>
-  `;
-  DOM.cardsViewContainer.innerHTML = `
-    <div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 50px;">
-      <div class="loading-spinner"></div>
-      <span>Loading product cards...</span>
-    </div>
-  `;
+  if (DOM.productsTableBody) {
+    DOM.productsTableBody.innerHTML = `
+      <tr>
+        <td colspan="4" class="table-state-row">
+          <div class="loading-spinner"></div>
+          <span>Loading catalog products...</span>
+        </td>
+      </tr>`;
+  }
 
   try {
     const params = new URLSearchParams({
@@ -494,9 +846,8 @@ async function fetchProducts() {
       size: state.pageSize,
       filter_type: state.filterType,
     });
-
-    if (state.searchQuery) params.set("search", state.searchQuery);
-    if (state.selectedBrandId) params.set("brand_id", state.selectedBrandId);
+    if (state.searchQuery) params.append("search", state.searchQuery);
+    if (state.selectedBrandId) params.append("brand_id", state.selectedBrandId);
 
     const res = await fetch(`/api/baserow/products?${params.toString()}`);
     const data = await res.json();
@@ -505,222 +856,192 @@ async function fetchProducts() {
     state.totalCount = data.count || 0;
     state.totalPages = data.total_pages || 1;
 
-    renderCatalog();
-    updatePagination();
-  } catch (err) {
-    console.error("Failed to fetch products:", err);
-    DOM.productsTableBody.innerHTML = `
-      <tr>
-        <td colspan="5" style="text-align: center; color: var(--rose-400); padding: 40px;">
-          Unable to load products from Baserow. Please check your connection and try again.
-        </td>
-      </tr>
-    `;
+    renderProducts();
+    updatePaginationUI();
+  } catch (e) {
+    if (DOM.productsTableBody) {
+      DOM.productsTableBody.innerHTML = `
+        <tr>
+          <td colspan="4" class="table-state-row" style="color: #fb7185;">
+            Failed to load products: ${e.message}
+          </td>
+        </tr>`;
+    }
   }
 }
 
-// Render Catalog
-function renderCatalog() {
-  if (state.products.length === 0) {
-    DOM.productsTableBody.innerHTML = `
-      <tr>
-        <td colspan="5" class="table-state-row">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:6px;opacity:0.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          No products found matching your current filter criteria.
-        </td>
-      </tr>
-    `;
-    DOM.cardsViewContainer.innerHTML = `
-      <div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 50px;">
-        No products found.
-      </div>
-    `;
+// Render Products (Table & Cards)
+function renderProducts() {
+  if (!state.products || state.products.length === 0) {
+    const emptyMsg = `<tr><td colspan="4" class="table-state-row">No products found matching your filters.</td></tr>`;
+    if (DOM.productsTableBody) DOM.productsTableBody.innerHTML = emptyMsg;
+    if (DOM.cardsViewContainer) DOM.cardsViewContainer.innerHTML = `<div class="empty-state-card">No products match your criteria.</div>`;
     return;
   }
 
   // 1. Table View
-  DOM.productsTableBody.innerHTML = state.products
-    .map((p) => {
-      const name = p.product_name || p.field_7347 || p.Name || `Product #${p.id}`;
-      const brandLinks = p.Brand_table || p.field_7376 || p.brands || [];
-      const brandName = (brandLinks.length > 0 && brandLinks[0].value) ? brandLinks[0].value : "—";
-      const catLinks = p.product_category || p.field_7363 || [];
-      const catName = (catLinks.length > 0 && catLinks[0].value) ? catLinks[0].value : "";
-      const subLinks = p.sub_category || p.field_7364 || [];
-      const subName = (subLinks.length > 0 && subLinks[0].value) ? subLinks[0].value : "";
-      const score = p.Score || p.field_7394 ? `Score: ${p.Score || p.field_7394}` : "";
-      const woonbloqId = p.WoonbloqProductID || p.field_7425 || "";
-      const isSynced = Boolean(woonbloqId && String(woonbloqId).trim());
-      const readySync = Boolean(p.field_8511 || p["Ready to Sync"]);
-
-      // Hero Images 1st Priority, then Product Images
-      const thumbUrl = getProductThumbnail(p, "https://via.placeholder.com/44?text=P");
+  if (DOM.productsTableBody) {
+    DOM.productsTableBody.innerHTML = state.products.map((p) => {
+      const title = p.product_name || p.Name || `Product #${p.id}`;
+      const brand = (p.Brand_table && p.Brand_table[0] && p.Brand_table[0].value) || "Spectrum";
+      const cat = (p.product_category && p.product_category[0] && p.product_category[0].value) || "Furniture";
+      const shopifyId = p.WoonbloqProductID || p.field_7425 || "";
+      const images = p.product_images || [];
+      const thumbUrl = images[0]?.url || "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=120&q=80";
 
       return `
         <tr onclick="openProductDrawer(${p.id})">
           <td>
-            <div class="product-cell-flex">
-              <div class="thumb-frame">
-                <img src="${thumbUrl}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.src='https://via.placeholder.com/44?text=P'" />
-              </div>
-              <div>
-                <div class="prod-title">${escapeHtml(name)}</div>
-                <div style="display: flex; gap: 6px; align-items: center; margin-top: 3px;">
-                  <span class="row-tag-sm">ID: #${p.id}</span>
-                  ${readySync ? '<span class="badge badge-yellow" style="font-size: 9px; padding: 1px 6px; display:inline-flex; align-items:center; gap:3px;"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Ready</span>' : ''}
+            <div class="product-cell-main">
+              <img class="product-thumb" src="${thumbUrl}" alt="" loading="lazy" />
+              <div class="product-meta-text">
+                <span class="product-title-txt">${escapeHTML(title)}</span>
+                <div class="product-sub-row">
+                  <span class="badge-brand">${escapeHTML(brand)}</span>
+                  <span>•</span>
+                  <span>Row #${p.id}</span>
                 </div>
               </div>
             </div>
           </td>
           <td>
-            <div>
-              <span class="brand-tag-cell">${escapeHtml(brandName)}</span>
-              <div class="cat-sub-text">${escapeHtml(catName)}${subName ? ` › ${escapeHtml(subName)}` : ''}</div>
-              ${score ? `<div class="score-text" style="margin-top:2px;">${escapeHtml(score)}</div>` : ''}
+            <div class="product-meta-text">
+              <span class="text-white">${escapeHTML(cat)}</span>
+              <span class="text-dim text-xs">${p.Designer || p.designer || "Studio"}</span>
             </div>
           </td>
           <td>
-            <div>
-              ${isSynced 
-                ? `<span class="badge badge-green" style="display:inline-flex;align-items:center;gap:4px;"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>Synced</span><div class="id-chip">#${escapeHtml(String(woonbloqId).replace('gid://shopify/Product/', ''))}</div>` 
-                : `<span class="badge badge-yellow" style="display:inline-flex;align-items:center;gap:4px;"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>Pending Sync</span>`}
-            </div>
+            ${shopifyId 
+              ? `<span class="badge-sync-state synced">
+                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                   Woonbloq #${shopifyId}
+                 </span>`
+              : `<span class="badge-sync-state pending">Unlinked</span>`
+            }
           </td>
-          <td style="text-align: right;" onclick="event.stopPropagation()">
-            <div class="actions-row">
-              <button class="btn-table-action" onclick="openProductDrawer(${p.id})" title="Inspect Product">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                View
-              </button>
-            </div>
+          <td style="text-align: right;">
+            <button class="table-action-btn" onclick="event.stopPropagation(); syncProductFromTable(${p.id})">
+              Sync
+            </button>
           </td>
         </tr>
       `;
-    })
-    .join("");
+    }).join("");
+  }
 
   // 2. Cards View
-  DOM.cardsViewContainer.innerHTML = state.products
-    .map((p) => {
-      const name = p.product_name || p.field_7347 || p.Name || `Product #${p.id}`;
-      const brandLinks = p.Brand_table || p.field_7376 || p.brands || [];
-      const brandName = (brandLinks.length > 0 && brandLinks[0].value) ? brandLinks[0].value : "Brand";
-      const woonbloqId = p.WoonbloqProductID || p.field_7425 || "";
-      const isSynced = Boolean(woonbloqId && String(woonbloqId).trim());
-
-      // Hero Images 1st Priority, then Product Images
-      const thumbUrl = getProductThumbnail(p, "https://via.placeholder.com/260x160?text=Product");
+  if (DOM.cardsViewContainer) {
+    DOM.cardsViewContainer.innerHTML = state.products.map((p) => {
+      const title = p.product_name || p.Name || `Product #${p.id}`;
+      const brand = (p.Brand_table && p.Brand_table[0] && p.Brand_table[0].value) || "Spectrum";
+      const images = p.product_images || [];
+      const thumbUrl = images[0]?.url || "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=400&q=80";
+      const shopifyId = p.WoonbloqProductID || p.field_7425 || "";
 
       return `
-        <div class="catalog-card-item" onclick="openProductDrawer(${p.id})">
-          <div class="card-img-cover">
-            <img src="${thumbUrl}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.src='https://via.placeholder.com/260x160?text=P'" />
+        <div class="product-card" onclick="openProductDrawer(${p.id})">
+          <div class="card-image-wrap">
+            <img src="${thumbUrl}" alt="" loading="lazy" />
           </div>
-          <div class="card-content">
-            <div style="font-size: 11px; font-weight: 700; color: var(--cyan-400); text-transform: uppercase;">${escapeHtml(brandName)}</div>
-            <div style="font-weight: 600; font-size: 13px; color: #fff; margin: 4px 0 10px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${escapeHtml(name)}</div>
-            <div style="margin-top: auto; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-subtle); padding-top: 8px;">
-              <span class="row-tag-sm">ID: #${p.id}</span>
-              ${isSynced ? '<span class="badge badge-green">Synced</span>' : '<span class="badge badge-yellow">Unlinked</span>'}
+          <div class="card-body">
+            <span class="card-brand">${escapeHTML(brand)}</span>
+            <span class="card-title">${escapeHTML(title)}</span>
+            <div class="card-footer">
+              <span class="text-xs text-dim">Row #${p.id}</span>
+              ${shopifyId ? '<span class="status-micro green">Synced</span>' : '<span class="status-micro amber">Pending</span>'}
             </div>
           </div>
         </div>
       `;
-    })
-    .join("");
-}
-
-// Update Pagination Bar
-function updatePagination() {
-  const start = (state.page - 1) * state.pageSize + 1;
-  const end = Math.min(state.page * state.pageSize, state.totalCount);
-  DOM.paginationInfo.innerHTML = `Showing <strong>${state.totalCount === 0 ? 0 : start}-${end}</strong> of <strong>${state.totalCount.toLocaleString()}</strong> products`;
-  DOM.btnPrevPage.disabled = state.page <= 1;
-  DOM.btnNextPage.disabled = state.page >= state.totalPages;
-  DOM.pageJumpInput.value = state.page;
-  DOM.totalPagesText.textContent = `of ${state.totalPages}`;
-}
-
-// Slide Drawer Open/Close
-async function openProductDrawer(rowId) {
-  DOM.drawerBackdrop.classList.add("active");
-  DOM.productDrawer.classList.add("active");
-
-  DOM.drawerRowId.textContent = `Item #${rowId}`;
-  DOM.drawerProductName.textContent = "Loading product data...";
-  DOM.drawerGallery.innerHTML = '<div style="color: var(--text-dim); padding: 10px;">Loading gallery...</div>';
-
-  try {
-    const res = await fetch(`/api/product/${rowId}`);
-    const data = await res.json();
-    const p = data.product;
-    state.selectedProduct = p;
-
-    const name = p.field_7347 || p.product_name || `Product #${p.id}`;
-    DOM.drawerProductName.textContent = name;
-
-    // Specs
-    const brandLinks = p.field_7376 || p.Brand_table || [];
-    DOM.drawerBrand.textContent = (brandLinks.length > 0 && brandLinks[0].value) ? brandLinks[0].value : "—";
-    
-    const catLinks = p.field_7363 || p.product_category || [];
-    DOM.drawerCategory.textContent = (catLinks.length > 0 && catLinks[0].value) ? catLinks[0].value : "—";
-    
-    const subLinks = p.field_7364 || p.sub_category || [];
-    DOM.drawerSubcategory.textContent = (subLinks.length > 0 && subLinks[0].value) ? subLinks[0].value : "—";
-    
-    DOM.drawerDesigner.textContent = p.field_7356 || "—";
-    DOM.drawerScore.textContent = p.field_7394 ? `${p.field_7394}` : "—";
-
-    // Sync info
-    const woonbloqId = p.field_7425 || "";
-    DOM.drawerWoonbloqId.textContent = woonbloqId ? String(woonbloqId).replace("gid://shopify/Product/", "#") : "Not Linked to Shopify";
-    DOM.drawerWoonbloqStatus.textContent = p.field_7427 || (woonbloqId ? "Added" : "Pending");
-    DOM.drawerWoonbloqStatus.className = `badge ${woonbloqId ? 'badge-green' : 'badge-yellow'}`;
-    DOM.drawerReadyFlag.textContent = p.field_8511 ? "True (Ready)" : "False";
-
-    // Descriptions
-    DOM.drawerDescOriginal.textContent = p.field_7348 || "No original description available.";
-    DOM.drawerDescAI.textContent = p.field_7362 || "No Dutch AI translation generated yet.";
-
-    // Gallery: Hero images are FIRST PRIORITY, then BG Removed, then Product Images, then Lifestyle Images
-    const allMedia = [
-      ...(p.field_7358 || p.hero_images || []).map(img => ({ ...img, label: "Hero" })),
-      ...(p.field_7400 || p.bg_removed_hero || []).map(img => ({ ...img, label: "BG Removed" })),
-      ...(p.field_7349 || p.product_images || []).map(img => ({ ...img, label: "Product" })),
-      ...(p.field_7359 || p.lifestyle_images || []).map(img => ({ ...img, label: "Lifestyle" })),
-    ];
-
-    if (allMedia.length === 0) {
-      DOM.drawerGallery.innerHTML = '<div style="color: var(--text-dim); padding: 10px;">No media files uploaded for this product.</div>';
-    } else {
-      DOM.drawerGallery.innerHTML = allMedia
-        .map(
-          (m) => `
-            <div class="drawer-gallery-thumb" title="${escapeHtml(m.label)} Image">
-              <img src="${m.url}" alt="${escapeHtml(m.label)}" onerror="this.src='https://via.placeholder.com/110?text=Image'" />
-              <span class="thumb-tag">${escapeHtml(m.label)}</span>
-            </div>
-          `
-        )
-        .join("");
-    }
-
-  } catch (err) {
-    console.error("Failed to load product details:", err);
-    DOM.drawerProductName.textContent = "Failed to load product";
+    }).join("");
   }
 }
 
-function closeDrawer() {
-  DOM.drawerBackdrop.classList.remove("active");
-  DOM.productDrawer.classList.remove("active");
-  state.selectedProduct = null;
+function updatePaginationUI() {
+  const start = Math.min((state.page - 1) * state.pageSize + 1, state.totalCount);
+  const end = Math.min(state.page * state.pageSize, state.totalCount);
+
+  if (DOM.paginationInfo) {
+    DOM.paginationInfo.innerHTML = `Showing <strong>${start}-${end}</strong> of <strong>${state.totalCount.toLocaleString()}</strong> products`;
+  }
+  if (DOM.pageJumpInput) DOM.pageJumpInput.value = state.page;
+  if (DOM.totalPagesText) DOM.totalPagesText.textContent = `of ${state.totalPages}`;
+  if (DOM.btnPrevPage) DOM.btnPrevPage.disabled = state.page <= 1;
+  if (DOM.btnNextPage) DOM.btnNextPage.disabled = state.page >= state.totalPages;
 }
 
-// Single-Click Product Sync
-async function syncProductAction(rowId) {
-  showToast(`Initiating Shopify sync for Item #${rowId}...`, "info");
+function setViewMode(mode) {
+  state.viewMode = mode;
+  if (mode === "table") {
+    DOM.btnTableView?.classList.add("active");
+    DOM.btnCardsView?.classList.remove("active");
+    if (DOM.tableViewContainer) DOM.tableViewContainer.style.display = "block";
+    if (DOM.cardsViewContainer) DOM.cardsViewContainer.style.display = "none";
+  } else {
+    DOM.btnCardsView?.classList.add("active");
+    DOM.btnTableView?.classList.remove("active");
+    if (DOM.tableViewContainer) DOM.tableViewContainer.style.display = "none";
+    if (DOM.cardsViewContainer) DOM.cardsViewContainer.style.display = "grid";
+  }
+}
+
+// =============================================================================
+// PRODUCT DETAIL DRAWER
+// =============================================================================
+async function openProductDrawer(rowId) {
+  try {
+    const res = await fetch(`/api/product/${rowId}`);
+    const data = await res.json();
+    if (!data.ok || !data.product) return;
+
+    const p = data.product;
+    state.selectedProduct = p;
+
+    if (DOM.drawerRowId) DOM.drawerRowId.textContent = `Item #${p.id}`;
+    if (DOM.drawerProductName) DOM.drawerProductName.textContent = p.product_name || `Product #${p.id}`;
+
+    // Gallery
+    const allImages = [...(p.product_images || []), ...(p.lifestyle_images || []), ...(p.detail_image || [])];
+    if (DOM.drawerGallery) {
+      if (allImages.length > 0) {
+        DOM.drawerGallery.innerHTML = allImages.map((img) => `<img class="drawer-gallery-thumb" src="${img.url}" alt="" />`).join("");
+      } else {
+        DOM.drawerGallery.innerHTML = `<span class="text-dim text-xs">No media files uploaded.</span>`;
+      }
+    }
+
+    if (DOM.drawerBrand) DOM.drawerBrand.textContent = (p.Brand_table && p.Brand_table[0] && p.Brand_table[0].value) || "—";
+    if (DOM.drawerCategory) DOM.drawerCategory.textContent = (p.product_category && p.product_category[0] && p.product_category[0].value) || "—";
+    if (DOM.drawerSubcategory) DOM.drawerSubcategory.textContent = (p.sub_category && p.sub_category[0] && p.sub_category[0].value) || "—";
+    if (DOM.drawerDesigner) DOM.drawerDesigner.textContent = p.Designer || "—";
+    if (DOM.drawerScore) DOM.drawerScore.textContent = p.Score || "—";
+
+    const shopId = p.WoonbloqProductID || p.field_7425 || "";
+    if (DOM.drawerWoonbloqId) DOM.drawerWoonbloqId.textContent = shopId || "Not Linked";
+    if (DOM.drawerWoonbloqStatus) {
+      DOM.drawerWoonbloqStatus.textContent = shopId ? "Connected" : "Pending";
+      DOM.drawerWoonbloqStatus.className = `badge ${shopId ? 'badge-green' : 'badge-amber'}`;
+    }
+    if (DOM.drawerReadyFlag) DOM.drawerReadyFlag.textContent = p.ready_to_sync ? "True" : "False";
+
+    if (DOM.drawerDescOriginal) DOM.drawerDescOriginal.textContent = p.product_description || "No description available.";
+    if (DOM.drawerDescAI) DOM.drawerDescAI.textContent = p.ai_description_translated_NL || "No Dutch AI translation generated yet.";
+
+    // Open drawer
+    DOM.productDrawer?.classList.add("open");
+    DOM.drawerBackdrop?.classList.add("open");
+  } catch (e) {
+    showToast(`Failed to load product details: ${e.message}`, "error");
+  }
+}
+
+function closeProductDrawer() {
+  DOM.productDrawer?.classList.remove("open");
+  DOM.drawerBackdrop?.classList.remove("open");
+}
+
+async function syncProductFromTable(rowId) {
+  showToast(`Initiating Shopify sync for row #${rowId}...`);
   try {
     const res = await fetch("/api/sync/product", {
       method: "POST",
@@ -728,247 +1049,156 @@ async function syncProductAction(rowId) {
       body: JSON.stringify({ row_id: rowId, dry_run: false }),
     });
     const data = await res.json();
-    if (res.ok && data.ok) {
-      showToast(`Successfully ${data.action} product "${data.product_title}" on Shopify!`, "success");
+    if (data.ok) {
+      showToast(`Product ${data.action} on Shopify (ID: ${data.shopify_id})`);
       await Promise.all([fetchStats(), fetchProducts()]);
-      if (state.selectedProduct && state.selectedProduct.id === rowId) {
-        openProductDrawer(rowId);
-      }
     } else {
-      showToast(`Sync Failed: ${data.detail || "Unknown error"}`, "error");
+      showToast(data.detail || "Sync failed", "error");
     }
-  } catch (err) {
-    showToast(`Sync error: ${err.message}`, "error");
+  } catch (e) {
+    showToast(`Sync error: ${e.message}`, "error");
   }
 }
 
-// Quick Prompt Trigger
-function usePrompt(text) {
-  openChatWidget();
-  DOM.chatInput.value = text;
-  DOM.chatInput.style.height = "auto";
-  sendMessage();
+// =============================================================================
+// COPILOT AI CHAT WIDGET
+// =============================================================================
+function toggleChatWidget(forceOpen) {
+  const isOpen = forceOpen !== undefined ? forceOpen : !DOM.aiChatWidget?.classList.contains("open");
+  if (isOpen) {
+    DOM.aiChatWidget?.classList.add("open");
+    DOM.chatInput?.focus();
+  } else {
+    DOM.aiChatWidget?.classList.remove("open");
+  }
 }
 
-// Send Chat Message to Autonomous Agent
-async function sendMessage() {
-  const query = DOM.chatInput.value.trim();
-  if (!query || state.isChatLoading) return;
+function renderChat() {
+  if (!DOM.chatMessages) return;
+  DOM.chatMessages.innerHTML = state.chatMessages.map((msg) => {
+    let renderedContent = msg.content;
+    if (typeof marked !== "undefined" && !msg.content.includes("welcome-prompts-grid")) {
+      try {
+        renderedContent = marked.parse(msg.content);
+      } catch (e) {
+        renderedContent = escapeHTML(msg.content);
+      }
+    }
+    return `
+      <div class="msg-row ${msg.role}">
+        <div class="msg-bubble">
+          ${renderedContent}
+        </div>
+      </div>
+    `;
+  }).join("");
 
-  const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  state.chatMessages.push({ role: "user", content: query, time: now });
-  DOM.chatInput.value = "";
-  DOM.chatInput.style.height = "auto";
+  DOM.chatMessages.scrollTop = DOM.chatMessages.scrollHeight;
+}
+
+function usePrompt(promptText) {
+  toggleChatWidget(true);
+  if (DOM.chatInput) {
+    DOM.chatInput.value = promptText;
+    sendChatMessage();
+  }
+}
+
+async function sendChatMessage() {
+  const text = DOM.chatInput?.value.trim();
+  if (!text || state.isChatLoading) return;
+
+  state.chatMessages.push({ role: "user", content: text });
+  if (DOM.chatInput) DOM.chatInput.value = "";
+  renderChat();
+
   state.isChatLoading = true;
+  state.chatMessages.push({ role: "assistant", content: "Thinking and querying catalog tools..." });
   renderChat();
 
   try {
+    const apiMessages = state.chatMessages.slice(0, -1).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: state.chatMessages,
-        model: "anthropic/claude-3.5-sonnet",
-      }),
+      body: JSON.stringify({ messages: apiMessages }),
     });
 
     const data = await res.json();
-    const replyTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    state.chatMessages.pop(); // Remove loading bubble
 
-    if (res.ok) {
-      if (data.confirmation_required) {
-        // Trigger security guardrail modal
-        pendingConfirmation = {
-          tool_name: data.tool_name,
-          args: data.args,
-        };
-        DOM.confirmModalMsg.textContent = data.message;
-        DOM.modalPayloadPreview.textContent = JSON.stringify(data.args, null, 2);
-        DOM.confirmModal.classList.add("active");
-      }
-
-      state.chatMessages.push({
-        role: "assistant",
-        content: data.reply || "Action completed.",
-        tool_name: data.tool_name,
-        time: replyTime,
-      });
+    if (data.requires_confirmation) {
+      pendingConfirmation = data.confirmation_data;
+      showConfirmModal(data.message, data.confirmation_data);
     } else {
-      state.chatMessages.push({
-        role: "assistant",
-        content: `**[Agent Notice]** ${data.detail || "Unknown error occurred"}`,
-        time: replyTime,
-      });
+      state.chatMessages.push({ role: "assistant", content: data.reply || "Done." });
     }
-  } catch (err) {
-    state.chatMessages.push({
-      role: "assistant",
-      content: `**[Network Error]** ${err.message}`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    });
+  } catch (e) {
+    state.chatMessages.pop();
+    state.chatMessages.push({ role: "assistant", content: `Error: ${e.message}` });
   } finally {
     state.isChatLoading = false;
     renderChat();
   }
 }
 
-// Execute Confirmed Guardrail Action
-async function executeConfirmedAction(actionData) {
-  showToast(`Executing confirmed action: ${actionData.tool_name}...`, "info");
+function clearChat() {
+  state.chatMessages = [state.chatMessages[0]];
+  renderChat();
+  showToast("Chat conversation cleared");
+}
+
+// Confirmation Modal
+function showConfirmModal(message, data) {
+  if (DOM.confirmModalMsg) DOM.confirmModalMsg.textContent = message;
+  if (DOM.modalPayloadPreview) DOM.modalPayloadPreview.textContent = JSON.stringify(data, null, 2);
+  DOM.confirmModal?.classList.add("open");
+}
+
+function closeConfirmModal() {
+  DOM.confirmModal?.classList.remove("open");
+  pendingConfirmation = null;
+}
+
+async function executePendingAction() {
+  if (!pendingConfirmation) return;
+  const action = pendingConfirmation;
+  closeConfirmModal();
+
+  showToast("Executing authorized action...");
   try {
     const res = await fetch("/api/action/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(actionData),
+      body: JSON.stringify(action),
     });
     const result = await res.json();
-    state.chatMessages.push({
-      role: "assistant",
-      content: `**[Action Confirmed & Executed]**\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    });
+    state.chatMessages.push({ role: "assistant", content: `✅ **Action Executed**:\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\`` });
     renderChat();
-    showToast("Action executed successfully!", "success");
-    await fetchStats();
-  } catch (err) {
-    showToast(`Action failed: ${err.message}`, "error");
-  }
-}
-
-// Render Chat Messages (Independently Scrolled Stream)
-function renderChat() {
-  DOM.chatMessages.innerHTML = state.chatMessages
-    .map((msg) => {
-      const isUser = msg.role === "user";
-      const formattedContent = renderMarkdownText(msg.content);
-
-      // SVG icons for chat avatars
-      const aiAvatarIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>`;
-      const userAvatarIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
-      const toolIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`;
-
-      return `
-        <div class="msg-row ${isUser ? 'user' : 'assistant'}">
-          ${!isUser ? `<div class="msg-avatar">${aiAvatarIcon}</div>` : ''}
-          <div class="msg-bubble">
-            ${msg.tool_name ? `
-              <div class="tool-call-card">
-                <div class="tool-call-header">
-                  <span style="display:inline-flex;align-items:center;gap:5px;">${toolIcon} Executed MCP Tool:</span>
-                  <span>${escapeHtml(msg.tool_name)}</span>
-                </div>
-              </div>` : ''}
-            <div>${formattedContent}</div>
-            <div style="font-size: 10px; color: var(--text-dim); text-align: right; margin-top: 4px;">${msg.time || ''}</div>
-          </div>
-          ${isUser ? `<div class="msg-avatar" style="background: var(--indigo-600); color: #fff;">${userAvatarIcon}</div>` : ''}
-        </div>
-      `;
-    })
-    .join("");
-
-  if (state.isChatLoading) {
-    const loadingAiIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>`;
-    DOM.chatMessages.innerHTML += `
-      <div class="msg-row assistant">
-        <div class="msg-avatar">${loadingAiIcon}</div>
-        <div class="msg-bubble" style="display: flex; align-items: center; gap: 8px;">
-          <div class="loading-spinner" style="width: 14px; height: 14px; margin: 0; border-width: 2px;"></div>
-          <span style="font-size: 12px; color: var(--text-dim);">Agent is querying MCP tools &amp; generating response...</span>
-        </div>
-      </div>
-    `;
-  }
-
-  // Smooth auto-scroll ONLY within the chat stream
-  DOM.chatMessages.scrollTop = DOM.chatMessages.scrollHeight;
-}
-
-// Pro Markdown Renderer with Marked & Highlight.js fallback + Table scroll wrapper
-function renderMarkdownText(text) {
-  if (!text) return "";
-  try {
-    if (typeof marked !== "undefined") {
-      marked.setOptions({
-        gfm: true,
-        breaks: true,
-      });
-      let parsed = marked.parse(text);
-      // Ensure all <table> elements are wrapped in a responsive .table-scroll-wrap container
-      parsed = parsed.replace(/<table(\s*[\s\S]*?)<\/table>/gi, '<div class="table-scroll-wrap"><table$1</table></div>');
-      return parsed;
-    }
+    fetchStats();
+    fetchProducts();
   } catch (e) {
-    console.warn("Marked parse error:", e);
+    showToast(`Execution failed: ${e.message}`, "error");
   }
-
-  // Fallback Formatter with Table support
-  let raw = text;
-  // Parse markdown tables if any
-  const lines = raw.split("\n");
-  let inTable = false;
-  let tableRows = [];
-  let outLines = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (line.startsWith("|") && line.endsWith("|")) {
-      if (!inTable) {
-        inTable = true;
-        tableRows = ['<div class="table-scroll-wrap"><table>'];
-      }
-      const cells = line.split("|").slice(1, -1).map(c => escapeHtml(c.trim()));
-      if (cells.every(c => /^:?-+:?$/.test(c))) {
-        continue;
-      }
-      const isHeader = tableRows.length === 1;
-      const tag = isHeader ? "th" : "td";
-      tableRows.push("<tr>" + cells.map(c => `<${tag}>${c}</${tag}>`).join("") + "</tr>");
-    } else {
-      if (inTable) {
-        inTable = false;
-        tableRows.push("</table></div>");
-        outLines.push(tableRows.join(""));
-        tableRows = [];
-      }
-      outLines.push(escapeHtml(line));
-    }
-  }
-  if (inTable) {
-    tableRows.push("</table></div>");
-    outLines.push(tableRows.join(""));
-  }
-
-  let html = outLines.join("<br/>");
-  html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-  html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-  return html;
 }
 
-// Toast System
-function showToast(message, type = "info") {
-  const icons = {
-    success: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>`,
-    error: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
-    info: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
-  };
-  const toast = document.createElement("div");
-  toast.className = `toast-item ${type}`;
-  toast.innerHTML = `
-    <span class="toast-icon">${icons[type] || icons.info}</span>
-    <span>${escapeHtml(message)}</span>
-  `;
-  DOM.toastContainer.appendChild(toast);
-  setTimeout(() => {
-    toast.style.opacity = "0";
-    setTimeout(() => toast.remove(), 250);
-  }, 4000);
+// =============================================================================
+// TOAST & UTILITIES
+// =============================================================================
+function showToast(msg, type = "info") {
+  if (!DOM.toastContainer) return;
+  const t = document.createElement("div");
+  t.className = `toast-msg toast-${type}`;
+  t.textContent = msg;
+  DOM.toastContainer.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
 }
 
-// Helper: Escape HTML
-function escapeHtml(str) {
+function escapeHTML(str) {
   if (!str) return "";
   return String(str)
     .replace(/&/g, "&amp;")
@@ -978,14 +1208,11 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-// User Logout Handler
 async function handleLogout() {
   try {
-    showToast("Signing out...", "info");
     await fetch("/api/auth/logout", { method: "POST" });
+    window.location.replace("/login");
   } catch (e) {
-    console.error("Logout error:", e);
-  } finally {
-    window.location.href = "/login";
+    window.location.replace("/login");
   }
 }

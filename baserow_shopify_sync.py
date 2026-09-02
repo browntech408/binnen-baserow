@@ -19,18 +19,15 @@ After create:
 Draft when missing: title, description, category, subcategory, brand, or hero_images.
 Shopify images: hero_images; if no hero, lifestyle_images go to product images (still draft).
 
-With --pixelbin-bg (and --apply): after each product is created on Shopify, all its
-images are processed via Pixelbin erase.bg and replaced in place (same image ids).
-
 Examples:
   python baserow_shopify_sync.py --dry-run --brand-id 16
   python baserow_shopify_sync.py --apply --brand-id 16 --limit 3
   python baserow_shopify_sync.py --apply --brand-id 16
-  python baserow_shopify_sync.py --apply --brand-id 16 --pixelbin-bg --limit 1
   python baserow_shopify_sync.py --apply --brand-ids 11,14,15,19,37
   python baserow_shopify_sync.py --apply --store-id 1
   python baserow_shopify_sync.py --apply --target binnen --store-id 3
 """
+
 from __future__ import annotations
 
 import argparse
@@ -50,9 +47,9 @@ from PIL import Image
 from baserow_client import BaserowClient
 from config import load_settings
 from shopify_client import ShopifyClient, load_shopify_config
-from shopify_pixelbin_remove_bg import pixelbin_replace_all_product_images
 
 COMPRESS_THRESHOLD = 900_000
+
 SHOPIFY_IMAGE_MAX = 20 * 1024 * 1024
 MAX_SINGLE_DOWNLOAD = 2 * 1024 * 1024
 FIELD_STORES = "field_8252"
@@ -295,9 +292,8 @@ class SyncJob:
     shopify_product_id: int | None = None
     metafields_ok: int = 0
     metafields_failed: int = 0
-    pixelbin_images_ok: int = 0
-    pixelbin_images_failed: int = 0
     error: str = ""
+
 
 
 def _product_fields(
@@ -521,21 +517,8 @@ def main() -> int:
         type=Path,
         default=Path("output") / "baserow_shopify_sync_report.json",
     )
-    parser.add_argument(
-        "--pixelbin-bg",
-        action="store_true",
-        help="After create: Pixelbin erase.bg on all Shopify images (needs --apply).",
-    )
-    parser.add_argument(
-        "--pixelbin-output-dir",
-        type=Path,
-        default=Path("output") / "pixelbin",
-        help="Local backup folder for PNG cutouts when using --pixelbin-bg.",
-    )
     args = parser.parse_args()
     dry_run = not args.apply
-    if args.pixelbin_bg and dry_run:
-        print("Note: --pixelbin-bg runs only with --apply (after product create).")
     target = STORE_TARGETS[args.target]
     brand_ids = _parse_brand_ids(args.brand_id, args.brand_ids)
 
@@ -549,10 +532,9 @@ def main() -> int:
     print(f"Shopify: {shopify.config.shop_host}")
     print(f"Target: {target.name} ({args.target})")
     print(f"Mode: {'DRY RUN' if dry_run else 'APPLY'}")
-    if args.pixelbin_bg:
-        print("Pixelbin: erase.bg on all images after each product create")
     if brand_ids:
         print(f"Brand filter: {', '.join(str(i) for i in sorted(brand_ids))}")
+
     if args.store_id:
         print(f"Store filter: {args.store_id}")
     print("Mapping: AI description; hero_images->images; lifestyle->metafield; category/sub/designer->metafields")
@@ -623,11 +605,6 @@ def main() -> int:
             f"(baserow={job.baserow_row_id}, hero={job.hero_image_count}, "
             f"lifestyle={job.lifestyle_image_count}, gallery={gallery} from {src}, "
             f"metafields={len(job.metafields) + lifestyle_mf})"
-            + (
-                " -> pixelbin all images after create"
-                if args.pixelbin_bg and not dry_run
-                else ""
-            )
         )
     if len(jobs) > 15:
         print(f"  ... and {len(jobs) - 15} more")
@@ -640,11 +617,6 @@ def main() -> int:
     if not jobs:
         print("Nothing to sync.")
         return 0
-
-    if args.pixelbin_bg:
-        from pixelbin_bg import load_pixelbin_settings
-
-        load_pixelbin_settings()
 
     t0 = time.perf_counter()
     ok = 0
@@ -727,22 +699,8 @@ def main() -> int:
                 for err in mf_errors:
                     print(f"     {err}")
 
-            if args.pixelbin_bg:
-                product_for_px = created
-                if not product_for_px.get("images"):
-                    product_for_px = shopify.get_product(pid)
-                px_ok, px_fail, _ = pixelbin_replace_all_product_images(
-                    shopify,
-                    product_for_px,
-                    output_dir=args.pixelbin_output_dir,
-                )
-                job.pixelbin_images_ok = px_ok
-                job.pixelbin_images_failed = px_fail
-                print(
-                    f"  -> Pixelbin: {px_ok} images replaced"
-                    + (f", {px_fail} failed" if px_fail else "")
-                )
             applied_jobs.append(job)
+
         except Exception as exc:  # noqa: BLE001
             job.error = str(exc)
             applied_jobs.append(job)
@@ -771,9 +729,8 @@ def main() -> int:
                         "metafields_ok": j.metafields_ok,
                         "metafields_failed": j.metafields_failed,
                         "images_skipped": j.images_skipped,
-                        "pixelbin_images_ok": j.pixelbin_images_ok,
-                        "pixelbin_images_failed": j.pixelbin_images_failed,
                         "error": j.error,
+
                     }
                     for j in applied_jobs
                 ],

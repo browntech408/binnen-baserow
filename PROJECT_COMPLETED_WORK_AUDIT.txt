@@ -108,12 +108,9 @@ C. Scraper Core Utilities:
     - Hero Images: 1000x880 canvas, 85% bounding-box margin scaling, transparent background (PNG).
     - Detail / Lifestyle Images: 1760x1100 canvas, centered subject smart-crop, pure white background (JPG).
   * `_smart_crop_center()`: Uses fal.ai bounding box to center product subject without cutting edges.
-- `pixelbin_bg.py` & `shopify_pixelbin_remove_bg.py`: Automated Pixelbin `erase.bg` pipeline removing 
-  backgrounds from existing product catalogs and replacing Shopify product media in place.
 - `shopify_image_pipeline.py`: Multi-threaded batch processor classifying storefront images into Hero, 
   Detail, and Lifestyle buckets and updating Shopify metafields.
-- `claid_client.py` & `claid_expand_lifestyle.py`: Claid.ai API integration for automated generative 
-  background expansion of lifestyle images.
+- `fal_image_processor.py`: fal.ai vision integration for automated background removal, FLUX lifestyle staging, and detail feature cropping.
 - `test_unified_pipeline.py`: Comprehensive test harness combining:
   * GPT-4o Vision batch classification into Hero, Lifestyle, Detail.
   * fal.ai FLUX img2img / txt2img generative hero derivation for lifestyle-only products.
@@ -139,7 +136,7 @@ C. Scraper Core Utilities:
   * Binnen Design Target (Store ID 3, Product ID `field_8284`, Status `field_8283`).
   * Draft logic for incomplete products (missing hero, brand, or descriptions).
   * Lifestyle images isolated and attached to `metafields.custom.lifestyle_images`.
-  * Integrated Pixelbin background removal during sync with `--pixelbin-bg`.
+
 - `shopify_activate_products.py`: Activates draft products once QA passes.
 - `shopify_draft_bg_products.py` & `shopify_draft_lifestyle.py`: Safety utilities moving non-compliant products to draft.
 - `shopify_move_lifestyle_to_metafield_from_report.py`: Migrates lifestyle photos from product gallery to metafields.
@@ -168,7 +165,6 @@ C. Scraper Core Utilities:
 - `report_writer.py`: Generates standardized text and PDF scrape audit reports.
 - `brand_products_report.py`: Catalog statistical audit generator.
 - `export_shopify_duplicate_report.py`: Detects and logs duplicate product handles/titles in Shopify.
-- `diagnose_pixelbin_skipped.py`: Diagnostic tool identifying skipped background removal assets.
 
 ====================================================================================================
 9. COMPLETE FILE-BY-FILE INVENTORY OF THE CODEBASE
@@ -177,8 +173,9 @@ C. Scraper Core Utilities:
 |------------------------------------------------|-------------------------------------------------------------------|
 | .env.example                                   | Configuration template for API tokens and table IDs               |
 | README.md                                      | Quickstart guide, scraper documentation, and setup instructions    |
-| requirements.txt                               | Python dependencies (FastAPI, PIL, Pixelbin, ReportLab, etc.)     |
+| requirements.txt                               | Python dependencies (FastAPI, PIL, ReportLab, etc.)               |
 | baserow_client.py                              | Baserow REST API client (CRUD, file upload, pagination)            |
+
 | baserow_images.py                              | Image utility functions for Baserow attachments                    |
 | baserow_shopify_sync.py                        | Bidirectional Baserow -> Shopify sync engine (Woonbloq & Binnen)  |
 | baserow_shopify_sync_preview.py                | Dry-run preview utility for Shopify sync                           |
@@ -186,16 +183,11 @@ C. Scraper Core Utilities:
 | brand_products_report.py                       | Generates brand-level product count & audit reports                |
 | brand_scraper.py                               | Generic homepage crawler for title, meta, and H1 tags              |
 | check_synced_from_export.py                    | Compares Baserow rows against Shopify export CSVs                  |
-| claid_client.py                                | Claid.ai API client for background expansion                       |
-| claid_demo_lifestyle_before_after.py           | Claid.ai visual before/after comparison tool                       |
-| claid_expand_lifestyle.py                      | Batch lifestyle background expander using Claid.ai                 |
 | clear_products_table.py                        | Safety-guarded script to wipe products table                       |
 | config.py                                      | Centralized settings loader reading environment variables          |
 | description_ai.py                              | OpenRouter GPT-4o Dutch translation & SEO description generator    |
-| diagnose_pixelbin_skipped.py                   | Diagnoses reasons for skipped Pixelbin images                      |
 | discover_baserow.py                            | Inspects Baserow table schema and field IDs                        |
 | discover_baserow_relations.py                  | Prints foreign key relations across Baserow tables                 |
-| export_pixelbin_products_txt.py                | Logs Pixelbin processed product IDs to text file                   |
 | export_shopify_duplicate_report.py             | Generates report of duplicate Shopify product handles              |
 | fal_image_processor.py                         | Transparent hero (1000x880) & white detail (1760x1100) processor  |
 | fill_ai_description.py                         | Fills empty AI description fields in Baserow                       |
@@ -207,7 +199,6 @@ C. Scraper Core Utilities:
 | mcp_server.py                                  | Native Python Model Context Protocol (MCP) server for Claude AI    |
 | migrate_database.py                            | Database migration engine between Baserow tables                   |
 | nginx.conf                                     | Reverse proxy config for Hetzner server deployment                 |
-| pixelbin_bg.py                                 | Pixelbin background removal wrapper                                |
 | preview_brands.py                              | Dry-run tool previewing brands to be scraped                       |
 | product_baserow.py                             | Maps ScrapedProduct dataclass to Baserow API fields                |
 | product_schema.py                              | Pydantic & Dataclass schema definitions                            |
@@ -233,10 +224,8 @@ C. Scraper Core Utilities:
 | shopify_move_lifestyle_to_metafield_from_report.py | Migrates lifestyle images from report to metafields             |
 | shopify_move_metafield_lifestyle_to_images.py  | Restores lifestyle images from metafields to gallery               |
 | shopify_open_from_report.py                    | Opens product URLs in browser from error reports                   |
-| shopify_pixelbin_remove_bg.py                  | Pixelbin in-place background remover for Shopify products          |
-| shopify_pixelbin_trimmed_rescan.py             | Rescans trimmed images for background removal                      |
-| shopify_process_white_nobg_from_report.py      | Processes white background images from reports                     |
 | shopify_recategorize_report.py                 | Recategorizes products based on report analysis                    |
+
 | sync_baserow_product_images_to_shopify.py      | Syncs Baserow attachment images to Shopify                         |
 | sync_daemon.py                                 | Background polling sync daemon service                             |
 | test_best_lifestyle_to_hero.py                 | Tests best generative lifestyle-to-hero conversion                 |
