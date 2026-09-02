@@ -356,7 +356,8 @@ function getFilteredModelsForTask(task) {
   const q = (state.playground.modelSearch || "").toLowerCase();
   if (!q) return models;
   return models.filter((m) => {
-    const hay = `${m.name} ${m.description || ""} ${m.badge || ""} ${m.endpoint || ""} ${m.id}`.toLowerCase();
+    const aliases = Array.isArray(m.search_aliases) ? m.search_aliases.join(" ") : "";
+    const hay = `${m.name} ${m.description || ""} ${m.badge || ""} ${m.endpoint || ""} ${m.id} ${aliases}`.toLowerCase();
     return hay.includes(q);
   });
 }
@@ -1104,14 +1105,14 @@ function renderPlaygroundModelsChecklist(catalogError = false) {
       ? `<img class="fal-model-thumb" src="${escapeHTML(m.thumbnail_url)}" alt="" loading="lazy" />`
       : "";
     return `
-      <label class="fal-model-row ${checked ? "selected" : ""}" data-model-id="${escapeHTML(m.id)}">
+      <label class="fal-model-row ${checked ? "selected" : ""} ${m.production ? "production-model" : ""}" data-model-id="${escapeHTML(m.id)}">
         <input type="checkbox" ${checked ? "checked" : ""} data-model-id="${escapeHTML(m.id)}" />
         ${thumb}
         <div class="fal-model-info">
           <div class="fal-model-name">${escapeHTML(m.name)}</div>
           <div class="fal-model-desc">${escapeHTML(m.description || "")}</div>
           <div class="fal-model-meta">
-            <span class="fal-model-badge">${escapeHTML(m.badge || "")}</span>
+            <span class="fal-model-badge ${m.production ? "production" : ""}">${escapeHTML(m.badge || "")}</span>
             <span class="fal-model-endpoint">${escapeHTML(m.endpoint || m.id || "")}</span>
           </div>
         </div>

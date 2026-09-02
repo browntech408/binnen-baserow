@@ -9,6 +9,19 @@ import requests
 
 FAL_PLATFORM_API = "https://api.fal.ai/v1"
 
+# Production endpoints used in CLI pipelines — always pinned in eval catalog
+PRODUCTION_ENDPOINTS: dict[str, list[str]] = {
+    "outpaint": ["fal-ai/bria/expand"],
+    "rembg": ["fal-ai/imageutils/rembg"],
+    "detail": ["fal-ai/flux-2-pro/edit"],
+}
+
+PRODUCTION_SEARCH_ALIASES: dict[str, list[str]] = {
+    "fal-ai/bria/expand": ["bria expand", "production", "outpaint production"],
+    "fal-ai/imageutils/rembg": ["rembg", "rmbg v1.4", "production", "background remove production"],
+    "fal-ai/flux-2-pro/edit": ["flux 2 pro edit", "flux-2-pro", "production", "detail production", "macro production"],
+}
+
 # Endpoints with tuned payload builders in fal_eval.py
 OPTIMIZED_ENDPOINTS: set[str] = {
     "fal-ai/bria/expand",
@@ -71,7 +84,7 @@ TASK_SEARCH: dict[str, dict[str, Any]] = {
         ],
     },
     "detail": {
-        "queries": ["image edit", "edit image", "inpaint edit"],
+        "queries": ["image edit", "edit image", "flux-2-pro edit", "inpaint edit"],
         "category": "image-to-image",
         "include": re.compile(
             r"(edit|kontext|inpaint|macro|detail)",
@@ -137,9 +150,28 @@ def _search_models(query: str, fal_key: str, category: str, limit: int = 50) -> 
 
 def _matches_task(endpoint_id: str, meta: dict[str, Any], task_cfg: dict[str, Any]) -> bool:
     hay = f"{endpoint_id} {meta.get('display_name', '')} {meta.get('description', '')}"
+    # Image-edit endpoints are valid for detail even when API copy mentions text-to-image
+    if "/edit" in endpoint_id and task_cfg is TASK_SEARCH.get("detail"):
+        return True
     if task_cfg["exclude"].search(hay):
         return False
     return bool(task_cfg["include"].search(hay))
+
+
+def _fetch_model_by_endpoint(endpoint_id: str, fal_key: str) -> dict[str, Any] | None:
+    try:
+        resp = requests.get(
+            f"{FAL_PLATFORM_API}/models",
+            params={"endpoint_id": endpoint_id, "status": "active"},
+            headers=_headers(fal_key),
+            timeout=30,
+        )
+        if not resp.ok:
+            return None
+        models = resp.json().get("models") or []
+        return models[0] if models else None
+    except Exception:
+        return None
 
 
 def _fetch_pricing(endpoint_ids: list[str], fal_key: str) -> dict[str, float]:
@@ -172,11 +204,19 @@ def _to_catalog_entry(
     task: str,
     price: float | None,
     default_selected: bool,
+    *,
+    production: bool = False,
 ) -> dict[str, Any]:
     endpoint_id = raw.get("endpoint_id", "")
     meta = raw.get("metadata") or {}
     name = meta.get("display_name") or endpoint_id.split("/")[-1]
     optimized = endpoint_id in OPTIMIZED_ENDPOINTS
+    if production:
+        badge = "Production"
+    elif optimized:
+        badge = "Optimized"
+    else:
+        badge = "fal.ai"
     return {
         "id": endpoint_id,
         "name": name,
@@ -184,13 +224,15 @@ def _to_catalog_entry(
         "endpoint": endpoint_id,
         "cost_usd": price if price is not None else 0.01,
         "cost_unit": "per run",
-        "badge": "Optimized" if optimized else "fal.ai",
+        "badge": badge,
         "description": (meta.get("description") or "").strip(),
         "default_selected": default_selected,
         "thumbnail_url": meta.get("thumbnail_url"),
         "category": meta.get("category"),
         "source": "fal_api",
         "optimized": optimized,
+        "production": production,
+        "search_aliases": PRODUCTION_SEARCH_ALIASES.get(endpoint_id, []),
     }
 
 
@@ -211,9 +253,21 @@ def fetch_task_models(task: str, fal_key: str) -> list[dict[str, Any]]:
                 continue
             seen[endpoint_id] = raw
 
+    # Always include production + default endpoints even if search/filter missed them
+    pinned = list(dict.fromkeys(
+        (PRODUCTION_ENDPOINTS.get(task) or []) + (cfg.get("default_endpoints") or [])
+    ))
+    for endpoint_id in pinned:
+        if endpoint_id in seen:
+            continue
+        raw = _fetch_model_by_endpoint(endpoint_id, fal_key)
+        if raw:
+            seen[endpoint_id] = raw
+
     endpoint_ids = list(seen.keys())
     prices = _fetch_pricing(endpoint_ids, fal_key)
     defaults = set(cfg.get("default_endpoints") or [])
+    production_set = set(PRODUCTION_ENDPOINTS.get(task) or [])
 
     entries = [
         _to_catalog_entry(
@@ -221,12 +275,14 @@ def fetch_task_models(task: str, fal_key: str) -> list[dict[str, Any]]:
             task,
             prices.get(eid),
             default_selected=eid in defaults,
+            production=eid in production_set,
         )
         for eid in endpoint_ids
     ]
-    # Optimized models first, then alphabetical
+    # Production first, then optimized, then alphabetical
     entries.sort(
         key=lambda m: (
+            0 if m.get("production") else 1,
             0 if m["optimized"] else 1,
             m["name"].lower(),
         )

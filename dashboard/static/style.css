@@ -4184,6 +4184,15 @@ html, body {
   color: #c4b5fd;
 }
 
+.fal-model-badge.production {
+  background: rgba(16, 185, 129, 0.18);
+  color: #6ee7b7;
+}
+
+.fal-model-row.production-model {
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
 .fal-model-endpoint {
   font-size: 10px;
   color: #64748b;
