@@ -117,8 +117,8 @@ def select_best_image_for_hero(image_urls: list[str], product_name: str, product
         return 0
 
 def remove_background_with_fal(image_url: str) -> Image.Image:
-    print(f"Removing background for {image_url} using fal-ai...")
-    res = fal_call("fal-ai/imageutils/rembg", {"image_url": image_url})
+    print(f"Removing background for {image_url} using fal-ai (BiRefNet v2)...")
+    res = fal_call("fal-ai/birefnet/v2", {"image_url": image_url})
     if not res or "image" not in res:
         raise Exception(f"Failed to remove background. API Response: {res}")
         

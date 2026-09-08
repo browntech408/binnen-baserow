@@ -452,7 +452,7 @@ def resize_image(img_bytes: bytes, label: str) -> tuple[bytes, tuple[int, int], 
 
 def fal_remove_background(image_url_or_bytes: str | bytes, *, fal_key: str) -> bytes:
     """
-    Remove background using fal.ai (fal-ai/imageutils/rembg).
+    Remove background using fal.ai (fal-ai/birefnet/v2).
     Accepts public image URL or raw image bytes (converted to base64 data URI).
     Returns transparent PNG bytes.
     """
@@ -466,17 +466,17 @@ def fal_remove_background(image_url_or_bytes: str | bytes, *, fal_key: str) -> b
         "Authorization": f"Key {fal_key}",
         "Content-Type": "application/json",
     }
-    url = "https://fal.run/fal-ai/imageutils/rembg"
+    url = "https://fal.run/fal-ai/birefnet/v2"
     payload = {"image_url": img_input}
 
     resp = requests.post(url, headers=headers, json=payload, timeout=90)
     if not resp.ok:
-        raise RuntimeError(f"FAL RemBG Error ({resp.status_code}): {resp.text[:400]}")
+        raise RuntimeError(f"FAL BiRefNet Error ({resp.status_code}): {resp.text[:400]}")
 
     data = resp.json()
     out_url = (data.get("image") or {}).get("url")
     if not out_url:
-        raise RuntimeError(f"FAL RemBG returned no image URL: {data}")
+        raise RuntimeError(f"FAL BiRefNet returned no image URL: {data}")
 
     dl_resp = requests.get(out_url, timeout=60)
     if not dl_resp.ok or not dl_resp.content:

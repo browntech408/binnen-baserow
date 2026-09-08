@@ -191,8 +191,8 @@ def generate_from_scratch_with_fal(name: str, description: str, fal_key: str, op
     return resp.json()["images"][0]["url"]
 
 def remove_background_and_format(image_url: str) -> Image.Image:
-    print("Removing background of the generated image to make it transparent...")
-    res = fal_call("fal-ai/imageutils/rembg", {"image_url": image_url})
+    print("Removing background of the generated image using BiRefNet v2 to make it transparent...")
+    res = fal_call("fal-ai/birefnet/v2", {"image_url": image_url})
     if not res or "image" not in res:
         raise Exception(f"Failed to remove background. API Response: {res}")
         

@@ -12,13 +12,13 @@ FAL_PLATFORM_API = "https://api.fal.ai/v1"
 # Production endpoints used in CLI pipelines — always pinned in eval catalog
 PRODUCTION_ENDPOINTS: dict[str, list[str]] = {
     "outpaint": ["fal-ai/bria/expand"],
-    "rembg": ["fal-ai/imageutils/rembg"],
+    "rembg": ["fal-ai/birefnet/v2"],
     "detail": ["fal-ai/flux-2-pro/edit"],
 }
 
 PRODUCTION_SEARCH_ALIASES: dict[str, list[str]] = {
     "fal-ai/bria/expand": ["bria expand", "production", "outpaint production"],
-    "fal-ai/imageutils/rembg": ["rembg", "rmbg v1.4", "production", "background remove production"],
+    "fal-ai/birefnet/v2": ["birefnet", "birefnet v2", "production", "background remove production"],
     "fal-ai/flux-2-pro/edit": ["flux 2 pro edit", "flux-2-pro", "production", "detail production", "macro production"],
 }
 

@@ -115,8 +115,8 @@ def process_master(image_url: str, img_class: str) -> tuple[Image.Image, str]:
             print("  [+] Image already without BG (HERO). Keeping transparent.")
             img_no_bg = orig.convert("RGBA")
         else:
-            print("  [-] Image has BG (HERO). Removing BG with fal.ai...")
-            res = fal_call("fal-ai/imageutils/rembg", {"image_url": image_url})
+            print("  [-] Image has BG (HERO). Removing BG with fal.ai (BiRefNet v2)...")
+            res = fal_call("fal-ai/birefnet/v2", {"image_url": image_url})
             img_data = requests.get(res["image"]["url"]).content
             img_no_bg = Image.open(io.BytesIO(img_data)).convert("RGBA")
             
@@ -163,7 +163,7 @@ def _smart_crop_center(image_url: str, target_w: int, target_h: int) -> Image.Im
     
     try:
         # Call fal to just get the bbox for centering
-        res = fal_call("fal-ai/imageutils/rembg", {"image_url": image_url})
+        res = fal_call("fal-ai/birefnet/v2", {"image_url": image_url})
         img_data = requests.get(res["image"]["url"]).content
         mask_img = Image.open(io.BytesIO(img_data)).convert("RGBA")
         bbox = mask_img.getbbox()
