@@ -51,7 +51,7 @@ USAGE
 REQUIRED ENV VARS
   SHOPIFY_SHOP, SHOPIFY_ACCESS_TOKEN (or CLIENT_ID + CLIENT_SECRET)
   OPENROUTER_API_KEY
-  FAL_KEY              (hero BG removal via fal.ai; optional -- skipped if missing)
+  FAL_KEY              (hero BG removal + AI upscale when source < target; optional)
 
 OPTIONAL ENV VARS
   PIPELINE_WORKERS=8               parallel image download/resize threads
@@ -431,12 +431,88 @@ def _resize_detail(img_bytes: bytes, target_w: int, target_h: int) -> bytes:
     return buf.getvalue()
 
 
-def resize_image(img_bytes: bytes, label: str) -> tuple[bytes, tuple[int, int], str]:
+def fal_upscale_image(
+    image_url_or_bytes: str | bytes,
+    *,
+    fal_key: str,
+    scale: float = 2.0,
+) -> bytes:
+    """Upscale via fal.ai ESRGAN. Returns upscaled image bytes."""
+    if isinstance(image_url_or_bytes, bytes):
+        b64 = base64.b64encode(image_url_or_bytes).decode("ascii")
+        img_input = f"data:image/png;base64,{b64}"
+    else:
+        img_input = str(image_url_or_bytes).strip()
+
+    headers = {
+        "Authorization": f"Key {fal_key}",
+        "Content-Type": "application/json",
+    }
+    url = "https://fal.run/fal-ai/esrgan"
+    payload = {
+        "image_url": img_input,
+        "scale": float(scale),
+        "model": "RealESRGAN_x4plus" if scale >= 3 else "RealESRGAN_x2plus",
+    }
+
+    resp = requests.post(url, headers=headers, json=payload, timeout=120)
+    if not resp.ok:
+        raise RuntimeError(f"FAL ESRGAN Error ({resp.status_code}): {resp.text[:400]}")
+
+    data = resp.json()
+    out_url = (data.get("image") or {}).get("url")
+    if not out_url:
+        raise RuntimeError(f"FAL ESRGAN returned no image URL: {data}")
+
+    dl_resp = requests.get(out_url, timeout=60)
+    if not dl_resp.ok or not dl_resp.content:
+        raise RuntimeError(f"Failed to download FAL upscale result from {out_url}")
+
+    return dl_resp.content
+
+
+def _ai_upscale_if_needed(
+    img_bytes: bytes,
+    target_w: int,
+    target_h: int,
+    *,
+    fal_key: str,
+) -> bytes:
+    """AI-upscale only when source is smaller than target (source_w < target_w or source_h < target_h)."""
+    if not fal_key:
+        return img_bytes
+    with Image.open(io.BytesIO(img_bytes)) as img:
+        src_w, src_h = img.size
+    if src_w >= target_w and src_h >= target_h:
+        return img_bytes
+
+    needed = max(target_w / max(src_w, 1), target_h / max(src_h, 1))
+    fal_scale = 4.0 if needed > 2.0 else 2.0
+    try:
+        return fal_upscale_image(img_bytes, fal_key=fal_key, scale=fal_scale)
+    except Exception:
+        # Fall back to original bytes; normal PIL resize still runs.
+        return img_bytes
+
+
+def resize_image(
+    img_bytes: bytes,
+    label: str,
+    *,
+    fal_key: str = "",
+) -> tuple[bytes, tuple[int, int], str]:
     """Resize image bytes according to the label's category spec.
     Returns (resized_bytes, (width, height), file_extension).
+
+    If fal_key is set and source is smaller than the target size, AI-upscale
+    via fal.ai ESRGAN first, then apply the normal PIL resize.
     """
     target_w, target_h = CATEGORY_DIMS[label]
     fmt = CATEGORY_FORMAT[label]
+    if fal_key:
+        img_bytes = _ai_upscale_if_needed(
+            img_bytes, target_w, target_h, fal_key=fal_key
+        )
     if label == "hero":
         return _resize_hero(img_bytes, target_w, target_h), (target_w, target_h), fmt
     if label == "lifestyle":
@@ -700,9 +776,9 @@ def _step3_4_resize(
                 # Non-fatal -- note the warning and continue with original bytes
                 rec.resize_error = f"[BG-WARN] {exc}"
 
-        # Step 3: Resize per category spec
+        # Step 3: Resize per category spec (AI-upscale first only if source < target)
         try:
-            out, dims, _ = resize_image(img_bytes, rec.label)
+            out, dims, _ = resize_image(img_bytes, rec.label, fal_key=fal_key)
             rec.resized_bytes = out
             rec.resized_dims = dims
         except Exception as exc:  # noqa: BLE001
